@@ -1,0 +1,7 @@
+Place your brand logo image here named `brand-logo.png` or `brand-logo.svg`.
+
+How to add:
+- Save the provided logo as PNG or SVG.
+- Put it in this folder as `brand-logo.png` (recommended).
+
+At runtime, it will be available at /brand-logo.png
