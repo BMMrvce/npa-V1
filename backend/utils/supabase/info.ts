@@ -1,0 +1,5 @@
+
+export const SUPABASE_URL = Deno.env.get("https://supabase.com/dashboard/project/dhsmxdfzmixqqoqlnfka")!;
+
+export const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRoc214ZGZ6bWl4cXFvcWxuZmthIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDg4ODA0OSwiZXhwIjoyMDc2NDY0MDQ5fQ.AtDD1XXpZy7igkgsON9-GRKWw4yuJrn-6ho4_LzOV9Y")!;  
+export const SUPABASE_ANON_KEY = Deno.env.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRoc214ZGZ6bWl4cXFvcWxuZmthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4ODgwNDksImV4cCI6MjA3NjQ2NDA0OX0.5KLHjnC1V_rJ60lMNleaVclB7kgagK_2NRgzw2c_s3w")!;
