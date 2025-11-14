@@ -64,33 +64,66 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
   };
 
   const generateQRs = async (): Promise<Record<string, string> | undefined> => {
+    // helper: generate QR images for currently selected devices (used as a fallback for printing)
     if (!selectedOrg) return;
     setGenerating(true);
     try {
-      // only generate for selected devices
       const orgDevices = devices.filter(d => d.organization_id === selectedOrg && (selectedIds[d.id] ?? true));
       const map: Record<string, string> = {};
       await Promise.all(orgDevices.map(async (dev) => {
-        // Use the device serial_number (same as DevicesPage) as canonical QR content
         const content = `${dev.serial_number || dev.code || dev.id}`;
         try {
-          const dataUrl = await QRCode.toDataURL(content, { width: 300, margin: 2 });
+          const dataUrl = await QRCode.toDataURL(content, { width: 200, margin: 2 });
           map[dev.id] = dataUrl;
         } catch (e) {
           console.error('QR error', e);
         }
       }));
-      setQrImages(map);
+      // merge into existing images so UI previews are preserved
+      setQrImages(prev => ({ ...prev, ...map }));
       return map;
     } finally {
       setGenerating(false);
     }
   };
 
+  // auto-generate QR images for all devices in the selected organization (QRs are static)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!selectedOrg) {
+        setQrImages({});
+        return;
+      }
+      setGenerating(true);
+      const orgDevices = devices.filter(d => d.organization_id === selectedOrg);
+      const map: Record<string, string> = {};
+      await Promise.all(orgDevices.map(async (dev) => {
+        const content = `${dev.serial_number || dev.code || dev.id}`;
+        try {
+          const dataUrl = await QRCode.toDataURL(content, { width: 200, margin: 2 });
+          map[dev.id] = dataUrl;
+        } catch (e) {
+          console.error('QR error', e);
+        }
+      }));
+      if (!cancelled) setQrImages(map);
+      setGenerating(false);
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [selectedOrg, devices]);
+
   const devicesForOrg = devices.filter(d => d.organization_id === selectedOrg);
   // derive selected devices (preserve sort by serial_number asc)
   const selectedDevices = devicesForOrg.filter(d => (selectedIds[d.id] ?? true));
   const selectedDevicesSorted = [...selectedDevices].sort((a, b) => {
+    const sa = (a.serial_number || a.code || a.id || '').toString();
+    const sb = (b.serial_number || b.code || b.id || '').toString();
+    return sa.localeCompare(sb, undefined, { numeric: true });
+  });
+  // also sort all devices for rendering so deselected devices remain visible
+  const devicesForOrgSorted = [...devicesForOrg].sort((a, b) => {
     const sa = (a.serial_number || a.code || a.id || '').toString();
     const sb = (b.serial_number || b.code || b.id || '').toString();
     return sa.localeCompare(sb, undefined, { numeric: true });
@@ -136,13 +169,13 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
         <head>
           <title>QR Codes - ${org?.name || ''}</title>
             <style>
-            body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 20px; }
+            body { font-family: system-ui, -apple-system, 'Arial', Roboto, 'Helvetica Neue', Arial; padding: 20px; }
             /* page grid: header spans full width then items in 3 columns */
             .page { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; page-break-after: always; grid-auto-rows: min-content; justify-items: center; }
-            .org-header { grid-column: 1 / -1; text-align: center; font-size: 18px; font-weight: 600; margin: 8px 0 4px 0; }
+            .org-header { grid-column: 1 / -1; text-align: center; font-size: 28px; font-weight: 800; margin: 8px 0 4px 0; color: #2563eb; }
             .qr-item { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top: 8px; }
             /* smaller print QR so layout matches preview */
-            .qr-img img { width: 200px; height:200px; object-fit:contain; background: #fff; padding:4px; }
+            .qr-img img { width: 160px; height:160px; object-fit:contain; background: #79bee6ff; padding:4px; }
             .qr-label { margin-top: 10px; font-size: 14px; text-align:center; font-family: 'Segoe UI', Roboto, Arial, sans-serif; }
             @media print { body { margin:0; } .no-print { display:none; } }
           </style>
@@ -185,7 +218,10 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
             <option key={o.id} value={o.id}>{o.name || o.id}</option>
           ))}
         </select>
-        <Button onClick={generateQRs} disabled={!selectedOrg || generating}>{generating ? 'Generating...' : 'Generate QR Images'}</Button>
+        {/* QR images are generated automatically from device info; no manual generate button needed */}
+        <div className="flex items-center">
+          {generating ? <div className="text-sm text-gray-600">Generating QR images…</div> : null}
+        </div>
 
         <div className="flex items-center gap-2 ml-4">
           <input
@@ -210,15 +246,16 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
       <style>{`@media print { .no-print { display: none; } .page { page-break-after: always; } }`}</style>
 
       <div>
-        {selectedDevicesSorted.length === 0 && <div className="text-sm text-gray-500">No devices for selected organization.</div>}
+  {devicesForOrgSorted.length === 0 && <div className="text-sm text-gray-500">No devices for selected organization.</div>}
 
         {/* Compact preview grid: 3 QR cards per row */}
-        {selectedDevicesSorted.length > 0 && (
+        {devicesForOrgSorted.length > 0 && (
           <div className="bg-white p-4 mb-4 shadow-sm rounded w-full">
-            <div className="org-header w-full text-center font-semibold mb-2">{organizations.find(o => o.id === selectedOrg)?.name || ''}</div>
-            <div className="grid grid-cols-3 gap-6 items-center">
-              {selectedDevicesSorted.map(dev => (
-                <div key={dev.id} className="relative bg-white border rounded p-2 flex flex-col items-center shadow-sm">
+            <div className="org-header w-full text-center font-semibold mb-2 text-blue-600 text-xl">{organizations.find(o => o.id === selectedOrg)?.name || ''}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start justify-items-center">
+              {devicesForOrgSorted.map(dev => (
+                // show all devices (selected or not). deselected items are visible but dimmed and marked
+                <div key={dev.id} className={`relative bg-white border rounded p-2 flex flex-col items-center shadow-sm w-full ${!selectedIds[dev.id] ? 'opacity-60 grayscale' : ''}`}>
                   <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 bg-white p-0.5 rounded">
                     <input
                       type="checkbox"
@@ -237,13 +274,16 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
 
                   <div className="flex items-center justify-center py-2">
                     {qrImages[dev.id] ? (
-                      <img src={qrImages[dev.id]} alt={dev.serial_number || dev.code || dev.name} className="w-36 h-36" />
+                      <img src={qrImages[dev.id]} alt={dev.serial_number || dev.code || dev.name} className="w-28 h-28" />
                     ) : (
                       <div className="text-xs text-gray-400">No QR generated</div>
                     )}
                   </div>
 
                   <div className="mt-2 text-sm font-semibold text-center">{dev.serial_number}</div>
+                  {!selectedIds[dev.id] && (
+                    <div className="mt-1 text-xs text-red-600">Not Selected</div>
+                  )}
                 </div>
               ))}
             </div>
