@@ -134,7 +134,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
     return out;
   };
 
-  const pages = chunk(selectedDevicesSorted, 6); // 6 per page (3 columns x 2 rows) to match print layout
+      const pages = chunk(selectedDevicesSorted, 12); // 12 per page (4 columns x 3 rows) to match print layout
 
   const handlePrint = async () => {
     // ensure QR images are generated
@@ -169,14 +169,14 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
         <head>
           <title>QR Codes - ${org?.name || ''}</title>
             <style>
-            body { font-family: system-ui, -apple-system, 'Arial', Roboto, 'Helvetica Neue', Arial; padding: 20px; }
-            /* page grid: header spans full width then items in 3 columns */
-            .page { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; page-break-after: always; grid-auto-rows: min-content; justify-items: center; }
-            .org-header { grid-column: 1 / -1; text-align: center; font-size: 28px; font-weight: 800; margin: 8px 0 4px 0; color: #2563eb; }
+            body { font-family: system-ui, -apple-system,   'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 20px; }
+            /* page grid: header spans full width then items in 4 columns for 12 per page */
+            .page { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; page-break-after: always; grid-auto-rows: min-content; justify-items: center; }
+            .org-header { grid-column: 1 / -1; text-align: center; font-size: 20px; font-weight: 600; margin: 8px 0 4px 0; color: #2563eb; }
             .qr-item { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top: 8px; }
-            /* smaller print QR so layout matches preview */
-            .qr-img img { width: 160px; height:160px; object-fit:contain; background: #79bee6ff; padding:4px; }
-            .qr-label { margin-top: 10px; font-size: 14px; text-align:center; font-family: 'Segoe UI', Roboto, Arial, sans-serif; }
+            /* larger print QR for better readability on paper */
+            .qr-img img { width: 160px; height:160px; object-fit:contain; background: #79bee6ff; padding:6px; }
+            .qr-label { margin-top: 10px; font-size: 12px; text-align:center; font-family: 'Segoe UI', Roboto, Arial, sans-serif; }
             @media print { body { margin:0; } .no-print { display:none; } }
           </style>
         </head>
@@ -203,7 +203,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl">Generate & Print QR Codes</h2>
-          <p className="text-sm text-gray-600">Select an organization and generate printable QR sheets (6 per page, 3 columns × 2 rows).</p>
+          <p className="text-sm text-gray-600">Select an organization and generate printable QR sheets (12 per page, 4 columns × 3 rows).</p>
         </div>
         <div className="flex items-center gap-2 no-print">
           <Button onClick={handlePrint} variant="outline">Print</Button>
