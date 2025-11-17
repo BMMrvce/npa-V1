@@ -233,7 +233,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
               setSelectAll(checked);
               if (!selectedOrg) return;
               const orgDevices = devices.filter(d => d.organization_id === selectedOrg);
-              const next: Record<string, boolean> = { ...selectedIds };
+              const next: Record<stgring, boolean> = { ...selectedIds };
               orgDevices.forEach(d => { next[d.id] = checked; });
               setSelectedIds(next);
             }}
