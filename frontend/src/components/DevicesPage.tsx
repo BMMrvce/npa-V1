@@ -82,28 +82,23 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
 
   const fetchDevices = async () => {
     try {
-      console.log('🔵 Fetching devices from:', `http://localhost:8000/make-server-60660975/devices`);
-      const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
+      setLoading(true);
+      console.log('🟢 Fetching devices from:', `http://localhost:8000/make-server-60660975/devices`);
+      const response = await fetch(`http://localhost:8000/make-server-60660975/devices`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-      console.log('🔵 Response status:', response.status, response.ok);
       const data = await response.json();
-      console.log('🔵 Response data:', data);
-      
-      if (!response.ok) {
-        console.error('❌ Error fetching devices:', data.error);
+      console.log('🟢 Response status:', response.status, response.ok);
+      if (response.ok) {
+        console.log('✅ Setting devices:', data.devices);
+        setDevices(data.devices || []);
+      } else {
+        console.error('❌ Error fetching devices:', data);
         toast.error(data.error || 'Failed to fetch devices');
-        return;
       }
-
-      console.log('✅ Setting devices:', data.devices);
-      setDevices(data.devices || []);
     } catch (error) {
       console.error('❌ Exception fetching devices:', error);
       toast.error('Failed to fetch devices');
@@ -422,14 +417,18 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
     const title = `Maintenance Report - ${historyDevice.name}`;
     const orgName = getOrganizationName(historyDevice.organization_id);
 
-    const rowsHtml = historyRecords.map(r => `
+    const rowsHtml = historyRecords.map(r => {
+      const statusText = (r.status || 'Yet to Start').toString();
+      const st = statusText.toLowerCase();
+      const statusCls = st.includes('progress') ? 'status-inprogress' : (st.includes('complete') || st.includes('completed')) ? 'status-completed' : 'status-default';
+      return `
       <tr>
         <td style="padding:8px;border:1px solid #e5e7eb">${new Date(r.created_at).toLocaleDateString('en-IN')}</td>
         <td style="padding:8px;border:1px solid #e5e7eb">${getTechnicianName(r.technician_id)}</td>
-        <td style="padding:8px;border:1px solid #e5e7eb">${r.status || 'Yet to Start'}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb"><span class="${statusCls}">${statusText}</span></td>
         <td style="padding:8px;border:1px solid #e5e7eb">${(r.description || '-').replace(/\n/g, '<br/>')}</td>
       </tr>
-    `).join('');
+    `}).join('');
 
     const nextMaintenance = (() => {
       if (!historyRecords || historyRecords.length === 0) return null;
@@ -450,19 +449,27 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
           <style>
             body { font-family: Inter, Arial, Helvetica, sans-serif; padding: 20px; color: #111; background: #fff }
             .top { display:flex; gap:12px; align-items:center }
-            .logo { width:72px; height:72px; border-radius:6px; display:inline-block; background:#0b74d1; color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:20px }
+            /* Logo box */
+            .logo { width:72px; height:72px; border-radius:6px; display:inline-block; background:#1e90ff; color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:20px }
             .org-title { text-align:center; flex:1 }
-            .org-title .big { font-size:20px; font-weight:700; color: rgb(204,0,0); letter-spacing:1px }
-            .org-title .addr { font-size:11px; font-weight:700; color:#232323 }
-            .org-title .contact { font-size:11px; color:#232323; margin-top:4px }
-            .sep { height:1px; background:#e5e7eb; margin-top:12px; }
-            .report-title { text-align:center; margin-top:10px; font-weight:700; font-size:15px; color:#2c3e50 }
-            .org-box { background:#eef0f1; padding:8px; border-radius:6px; margin-top:8px; text-align:center; font-weight:700; color:royalblue }
+            /* Large red uppercase header to match supplied image */
+            .org-title .big { font-size:44px; font-weight:800; color: rgb(204,0,0); letter-spacing:2px; text-transform:uppercase }
+            .org-title .addr { font-size:16px; font-weight:700; color:#111; margin-top:8px }
+            .org-title .contact { font-size:14px; color:#111; margin-top:6px }
+            /* thicker separator like the image */
+            .sep { height:3px; background:#d1d5db; margin:18px 0; width:100%; }
+            /* Report title and org box styling */
+            .report-title { text-align:center; margin-top:6px; font-weight:700; font-size:14px; color:#2c3e50 }
+            .org-box { background:transparent; padding:8px; border-radius:6px; margin-top:8px; text-align:center; font-weight:700; color:#2563eb }
+            .serial-red { color: rgb(204,0,0); font-weight:600 }
             .meta { display:flex; justify-content:space-between; margin-top:8px; font-size:12px; color:#505050 }
             .summary { background:#f1f8e9; padding:12px; border-radius:8px; margin-top:12px }
             table { border-collapse:collapse; width:100%; margin-top:12px }
             th, td { padding:8px; border:1px solid #e5e7eb; text-align:left }
-            th { background:#f3f4f6; font-weight:700 }
+            thead th { background: #1976b8; color: #fff; font-weight:700; padding:10px; }
+            .status-inprogress { display:inline-block; background:#fff4ce; color:#b85c00; padding:6px 10px; border-radius:6px; font-weight:700 }
+            .status-completed { display:inline-block; background:#e6f9ec; color:#176f2b; padding:6px 10px; border-radius:6px; font-weight:700 }
+            .status-default { display:inline-block; background:#f3f4f6; color:#374151; padding:6px 10px; border-radius:6px; font-weight:600 }
             @media print { body { padding:8mm } }
           </style>
         </head>
@@ -473,14 +480,12 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
               <div class="logo" style="display:none">NP</div>
             </div>
             <div class="org-title">
-              <div class="big">NATIONAL PROCESS AUTOMATION</div>
+              <div class="" style="color:red;font-size:30px;font-weight:Bold">NATIONAL PROCESS AUTOMATION</div>
               <div class="addr">#48, 4th cross, Ganesha Block, Nandini Layout, Bangalore-560096</div>
               <div class="contact">Ph: 080 23498376, 9900143996 &nbsp; e-mail: tech.npa@gmail.com</div>
               <div class="contact">www.npautomation.in</div>
             </div>
-            <div style="width:110px;text-align:right;font-size:12px;color:#374151">
-              Generated: ${new Date().toLocaleDateString('en-IN')}
-            </div>
+            <!-- Generated date removed per request -->
           </div>
           <div class="sep"></div>
 
@@ -488,7 +493,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
           <div class="org-box">${orgName.toUpperCase()}</div>
 
           <div class="meta">
-            <div>Device: <strong>${historyDevice.name}</strong> • Serial: <strong>${historyDevice.serial_number}</strong></div>
+            <div>Device: <strong>${historyDevice.name}</strong> • Serial: <strong class="serial-red">${historyDevice.serial_number}</strong></div>
             <div>Report ID: NPA-${new Date().toISOString().split('T')[0]}</div>
           </div>
 
@@ -905,7 +910,9 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
             <div className="text-center py-8 text-slate-500">No maintenance records found for this device.</div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <div>
+                <style>{`.history-table thead th { background:#1976b8; color:#fff; font-weight:700; padding:8px 10px } .history-table td { padding:6px 8px } .history-table tr { height:36px }`}</style>
+                <Table className="history-table">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -928,7 +935,8 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
             </div>
           )}
         </DialogContent>

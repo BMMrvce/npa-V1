@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, ClipboardList, FileText, Calendar, Download, Redo } from 'lucide-react';
+import { Plus, ClipboardList, FileText, Calendar, Download, Redo, ChevronLeft, ChevronRight } from 'lucide-react';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -81,6 +81,72 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editingNotesText, setEditingNotesText] = useState<string>('');
+  // Pagination for report dialog (page starts at 1)
+  const [reportPage, setReportPage] = useState<number>(1);
+  const reportPageSize = 10;
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+
+  // Check horizontal overflow for the table and update button visibility
+  const updateTableScrollState = () => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollWidth > el.clientWidth && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+
+  const updateVerticalScrollState = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    setCanScrollUp(el.scrollTop > 0);
+    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+  };
+
+  useEffect(() => {
+    updateTableScrollState();
+    const onResize = () => updateTableScrollState();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [orgReport, reportPage]);
+
+  useEffect(() => {
+    updateVerticalScrollState();
+    const onResizeV = () => updateVerticalScrollState();
+    window.addEventListener('resize', onResizeV);
+    return () => window.removeEventListener('resize', onResizeV);
+  }, [orgReport, reportPage]);
+
+  const scrollTableBy = (distance: number) => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: distance, behavior: 'smooth' });
+    // schedule update after scroll
+    setTimeout(updateTableScrollState, 300);
+  };
+
+  const scrollReportBy = (distance: number) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollBy({ top: distance, behavior: 'smooth' });
+    setTimeout(updateVerticalScrollState, 300);
+  };
+
+  // Pagination helpers
+  const reportTotalPages = Math.max(1, Math.ceil(orgReport.length / reportPageSize));
+  const reportPageRecords = orgReport.slice((reportPage - 1) * reportPageSize, reportPage * reportPageSize);
+  const gotoPage = (p: number) => {
+    const next = Math.max(1, Math.min(reportTotalPages, p));
+    setReportPage(next);
+    // refresh scroll state after page change
+    setTimeout(() => {
+      updateTableScrollState();
+      updateVerticalScrollState();
+    }, 150);
+  };
 
   const fetchMaintenance = async () => {
     try {
@@ -174,6 +240,12 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     fetchTechnicians();
     fetchOrganizations();
   }, [token]);
+
+  // Reset display count whenever a new report is generated or dialog opens
+  useEffect(() => {
+    // Reset to first page when a new report is generated or dialog opens
+    setReportPage(1);
+  }, [orgReport, reportDialogOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -485,7 +557,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         : pageWidth / 2;
 
       // Reduce font size a touch so long title fits well
-      const titleFontSize = hasLogo ? 24 : 26;
+      const titleFontSize = hasLogo ? 20 : 26;
       doc.setFontSize(titleFontSize);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(204, 0, 0);
@@ -550,10 +622,22 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   doc.setFillColor(236, 240, 241); // Light gray background
   const orgBoxY = reportTitleY + 4;
   doc.roundedRect(15, orgBoxY, pageWidth - 30, 10, 2, 2, 'F');
-  doc.setFontSize(20);
+  // Wrap long organization names to fit inside the page width
+  const orgText = orgName ? orgName.toUpperCase() : '';
+  const maxOrgWidth = pageWidth - 60; // leave margins
+  const orgLines = doc.splitTextToSize(orgText, maxOrgWidth);
+  // Choose font size based on number of lines
+  const orgFontSize = orgLines.length === 1 ? 20 : orgLines.length === 2 ? 16 : 14;
+  doc.setFontSize(orgFontSize);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor('RoyalBlue ');
-  doc.text(orgName.toUpperCase(), pageWidth / 2, orgBoxY + 7, { align: 'center' });
+  doc.setTextColor(11, 91, 209); // NPA blue
+  // Draw each line centered inside the org box
+  const lineHeight = orgFontSize * 0.6;
+  let startY = orgBoxY + 6 - (orgLines.length > 1 ? (lineHeight * (orgLines.length - 1)) / 2 : 0);
+  orgLines.forEach((line: string) => {
+    doc.text(line, pageWidth / 2, startY, { align: 'center' });
+    startY += lineHeight;
+  });
 
   // ========== REPORT METADATA ==========
   const metaY = orgBoxY + 14;
@@ -802,6 +886,13 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     setSelectedReportIds(prev =>
       prev.includes(id) ? prev.filter(rid => rid !== id) : [...prev, id]
     );
+  };
+
+  // Update vertical scroll button visibility on scroll (no auto-loading with pagination)
+  const handleReportScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    setCanScrollUp(target.scrollTop > 0);
+    setCanScrollDown(target.scrollTop + target.clientHeight < target.scrollHeight - 1);
   };
 
   const handleStatusChange = async (recordId: string, newStatus: string) => {
@@ -1342,7 +1433,13 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <DialogTitle>
-                    Organization Report: <span className="text-red-900">{getOrganizationName(selectedOrgId)}</span>
+                    Organization Report: <span
+                      className="text-red-900"
+                      title={getOrganizationName(selectedOrgId)}
+                      style={{ display: '-webkit-box' as any, WebkitLineClamp: 2 as any, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}
+                    >
+                      {getOrganizationName(selectedOrgId)}
+                    </span>
                   </DialogTitle>
                   <DialogDescription>View all maintenance records for this organization</DialogDescription>
                 </div>
@@ -1360,7 +1457,17 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
               </div>
             </DialogHeader>
 
-            <div className="flex-1 overflow-auto px-6 pb-6">
+            <div>
+              <style>{`
+                /* Small visible scrollbar for the report dialog */
+                .report-scroll { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.28) transparent; scrollbar-gutter: stable; }
+                .report-scroll::-webkit-scrollbar { width: 8px; }
+                .report-scroll::-webkit-scrollbar-track { background: transparent; }
+                .report-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 8px; }
+                .report-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.36); }
+              `}</style>
+
+              <div ref={scrollContainerRef} onScroll={handleReportScroll} className="flex-1 report-scroll overflow-auto px-6 pb-6 relative">
               <div className="space-y-4">
                 {orgReport.length === 0 ? (
                   <p className="text-center py-8 text-gray-500">No maintenance records found for this organization.</p>
@@ -1371,8 +1478,11 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                       <p className="text-sm text-gray-600 mt-2">Next Maintenance Date: <span className="font-bold">{getNextMaintenanceDate(orgReport) || '-'}</span></p>
                     </div>
 
-                    <div className="overflow-x-auto w-full">
-                      <Table className="min-w-full">
+                    <p className="text-sm text-gray-600">Showing <span className="font-semibold">{orgReport.length === 0 ? 0 : (Math.min((reportPage) * reportPageSize, orgReport.length) - (reportPageSize - 1) > orgReport.length ? orgReport.length : (reportPage - 1) * reportPageSize + 1)}</span> to <span className="font-semibold">{Math.min(reportPage * reportPageSize, orgReport.length)}</span> of <span className="font-semibold">{orgReport.length}</span> records. <span className="ml-2">Page <span className="font-semibold">{reportPage}</span> of <span className="font-semibold">{reportTotalPages}</span></span></p>
+
+                    <div className="overflow-x-auto w-full relative">
+                      <div ref={tableContainerRef} className="overflow-x-auto">
+                        <Table className="min-w-full">
                         <TableHeader>
                           <TableRow>
                             <TableHead></TableHead>
@@ -1384,7 +1494,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {orgReport.map((record: { id: string; created_at: string | number | Date; device_id: string; technician_id: string; status: string; description: any; }) => (
+                          {reportPageRecords.map((record: { id: string; created_at: string | number | Date; device_id: string; technician_id: string; status: string; description: any; }) => (
                             <TableRow key={record.id}>
                               <TableCell>
                                 <input type="checkbox" title="Select record" aria-label="Select maintenance record" checked={selectedReportIds.includes(record.id)} onChange={() => handleReportSelect(record.id)} />
@@ -1399,8 +1509,71 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                             </TableRow>
                           ))}
                         </TableBody>
-                      </Table>
+                        </Table>
+                      </div>
+
+                      {/* horizontal scroll controls */}
+                      {canScrollLeft && (
+                        <button
+                          aria-label="Scroll table left"
+                          onClick={() => scrollTableBy(-300)}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-white border rounded-full p-2 shadow-sm hover:shadow-md"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canScrollRight && (
+                        <button
+                          aria-label="Scroll table right"
+                          onClick={() => scrollTableBy(300)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-white border rounded-full p-2 shadow-sm hover:shadow-md"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )}
+
                     </div>
+
+                    {/* Vertical scroll controls (up/down) positioned relative to the scroll container */}
+                    {canScrollUp && (
+                      <button
+                        aria-label="Scroll up"
+                        onClick={() => scrollReportBy(-300)}
+                        className="absolute right-4 top-20 bg-white border rounded-full p-2 shadow-sm hover:shadow-md"
+                      >
+                        <ChevronLeft className="w-4 h-4 transform -rotate-90" />
+                      </button>
+                    )}
+                    {canScrollDown && (
+                      <button
+                        aria-label="Scroll down"
+                        onClick={() => scrollReportBy(300)}
+                        className="absolute right-4 bottom-6 bg-white border rounded-full p-2 shadow-sm hover:shadow-md"
+                      >
+                        <ChevronRight className="w-4 h-4 transform rotate-90" />
+                      </button>
+                    )}
+
+                    {reportTotalPages > 1 && (
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="text-sm text-gray-600">Page <span className="font-semibold">{reportPage}</span> of <span className="font-semibold">{reportTotalPages}</span></div>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => gotoPage(reportPage - 1)} disabled={reportPage === 1}>Prev</Button>
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: reportTotalPages }).map((_, i) => (
+                              <button
+                                key={i}
+                                onClick={() => gotoPage(i + 1)}
+                                className={`px-2 py-1 rounded ${reportPage === i + 1 ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+                              >
+                                {i + 1}
+                              </button>
+                            ))}
+                          </div>
+                          <Button size="sm" variant="ghost" onClick={() => gotoPage(reportPage + 1)} disabled={reportPage === reportTotalPages}>Next</Button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex justify-end mt-2">
                       <Button variant="outline" size="sm" onClick={() => generatePDF(orgReport.filter((r: { id: string }) => selectedReportIds.includes(r.id)))} disabled={selectedReportIds.length === 0}>
@@ -1411,6 +1584,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                   </>
                 )}
               </div>
+            </div>
             </div>
           </div>
         </DialogContent>
