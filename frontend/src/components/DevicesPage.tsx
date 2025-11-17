@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
-import { Plus, QrCode, Edit, Archive, ArchiveRestore, ClipboardList } from 'lucide-react';
+import { Plus, QrCode, Edit, Archive, ArchiveRestore, ClipboardList, Printer } from 'lucide-react';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import QRCode from 'qrcode';
 import { WaterDispenser } from './icons/WaterDispenser';
@@ -417,6 +417,115 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
     }
   };
 
+  const printDeviceReport = () => {
+    if (!historyDevice) return;
+    const title = `Maintenance Report - ${historyDevice.name}`;
+    const orgName = getOrganizationName(historyDevice.organization_id);
+
+    const rowsHtml = historyRecords.map(r => `
+      <tr>
+        <td style="padding:8px;border:1px solid #e5e7eb">${new Date(r.created_at).toLocaleDateString('en-IN')}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb">${getTechnicianName(r.technician_id)}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb">${r.status || 'Yet to Start'}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb">${(r.description || '-').replace(/\n/g, '<br/>')}</td>
+      </tr>
+    `).join('');
+
+    const nextMaintenance = (() => {
+      if (!historyRecords || historyRecords.length === 0) return null;
+      const latest = historyRecords.reduce((max, r) => {
+        const d = new Date(r.created_at);
+        return d > max ? d : max;
+      }, new Date(historyRecords[0].created_at));
+      const next = new Date(latest);
+      next.setDate(next.getDate() + 90);
+      return next.toLocaleDateString('en-IN');
+    })();
+
+    const html = `
+      <html>
+        <head>
+          <title>${title}</title>
+          <meta name="viewport" content="width=device-width,initial-scale=1" />
+          <style>
+            body { font-family: Inter, Arial, Helvetica, sans-serif; padding: 20px; color: #111; background: #fff }
+            .top { display:flex; gap:12px; align-items:center }
+            .logo { width:72px; height:72px; border-radius:6px; display:inline-block; background:#0b74d1; color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:20px }
+            .org-title { text-align:center; flex:1 }
+            .org-title .big { font-size:20px; font-weight:700; color: rgb(204,0,0); letter-spacing:1px }
+            .org-title .addr { font-size:11px; font-weight:700; color:#232323 }
+            .org-title .contact { font-size:11px; color:#232323; margin-top:4px }
+            .sep { height:1px; background:#e5e7eb; margin-top:12px; }
+            .report-title { text-align:center; margin-top:10px; font-weight:700; font-size:15px; color:#2c3e50 }
+            .org-box { background:#eef0f1; padding:8px; border-radius:6px; margin-top:8px; text-align:center; font-weight:700; color:royalblue }
+            .meta { display:flex; justify-content:space-between; margin-top:8px; font-size:12px; color:#505050 }
+            .summary { background:#f1f8e9; padding:12px; border-radius:8px; margin-top:12px }
+            table { border-collapse:collapse; width:100%; margin-top:12px }
+            th, td { padding:8px; border:1px solid #e5e7eb; text-align:left }
+            th { background:#f3f4f6; font-weight:700 }
+            @media print { body { padding:8mm } }
+          </style>
+        </head>
+        <body>
+          <div class="top">
+            <div>
+              <img src="/npa-logo.png" onerror="this.style.display='none'" style="width:72px;height:72px;object-fit:contain" />
+              <div class="logo" style="display:none">NP</div>
+            </div>
+            <div class="org-title">
+              <div class="big">NATIONAL PROCESS AUTOMATION</div>
+              <div class="addr">#48, 4th cross, Ganesha Block, Nandini Layout, Bangalore-560096</div>
+              <div class="contact">Ph: 080 23498376, 9900143996 &nbsp; e-mail: tech.npa@gmail.com</div>
+              <div class="contact">www.npautomation.in</div>
+            </div>
+            <div style="width:110px;text-align:right;font-size:12px;color:#374151">
+              Generated: ${new Date().toLocaleDateString('en-IN')}
+            </div>
+          </div>
+          <div class="sep"></div>
+
+          <div class="report-title">MAINTENANCE SERVICE REPORT</div>
+          <div class="org-box">${orgName.toUpperCase()}</div>
+
+          <div class="meta">
+            <div>Device: <strong>${historyDevice.name}</strong> • Serial: <strong>${historyDevice.serial_number}</strong></div>
+            <div>Report ID: NPA-${new Date().toISOString().split('T')[0]}</div>
+          </div>
+
+          <div class="summary">
+            <div>Total Maintenance Records: <strong>${historyRecords.length}</strong></div>
+            <div style="margin-top:6px">Next Maintenance Date: <strong>${nextMaintenance || '-'}</strong></div>
+          </div>
+
+          ${historyRecords.length === 0 ? `
+            <div style="padding:16px;color:#6b7280">No maintenance records found for this device.</div>
+          ` : `
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Technician</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          `}
+        </body>
+      </html>
+    `;
+
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => w.print(), 200);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -768,12 +877,27 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
       <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Maintenance History{historyDevice ? `: ${historyDevice.name}` : ''}</DialogTitle>
-            <DialogDescription>
-              {historyDevice ? (
-                <span className="text-xs">Serial: {historyDevice.serial_number} • Org: {getOrganizationName(historyDevice.organization_id)}</span>
-              ) : null}
-            </DialogDescription>
+            <div className="w-full flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle>Maintenance History{historyDevice ? `: ${historyDevice.name}` : ''}</DialogTitle>
+                <DialogDescription>
+                  {historyDevice ? (
+                    <span className="text-xs">Serial: {historyDevice.serial_number} • Org: {getOrganizationName(historyDevice.organization_id)}</span>
+                  ) : null}
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={printDeviceReport}
+                  disabled={historyRecords.length === 0}
+                  title={historyRecords.length === 0 ? 'No records to print' : 'Print device report'}
+                >
+                  <Printer className="w-4 h-4 mr-2" /> Print
+                </Button>
+              </div>
+            </div>
           </DialogHeader>
           {historyLoading ? (
             <div className="text-center py-8 text-slate-500">Loading history...</div>
