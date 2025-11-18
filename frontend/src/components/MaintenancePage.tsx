@@ -311,7 +311,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     }
 
     // Check if technicians exist
-    const activeTechs = technicians.filter((t: { archived: any; }) => !t.archived);
+    const activeTechs = technicians.filter((t: Technician) => !t.is_archived);
     if (activeTechs.length === 0) {
       toast.error('Cannot schedule maintenance: No active technicians available. Please add a technician first.');
       return;
@@ -446,8 +446,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     }
   };
 
-  const activeTechnicians = technicians;
-  const activeOrganizations = organizations.filter((o: { archived: any; }) => !o.archived);
+  const activeTechnicians = technicians.filter((t: Technician) => !t.is_archived);
+  const activeOrganizations = organizations.filter((o: Organization) => !o.archived);
   const [maintenanceOrgFilter, setMaintenanceOrgFilter] = useState('');
   const filteredMaintenance = maintenance.filter((r: { organization_id: string }) =>
     !maintenanceOrgFilter || r.organization_id === maintenanceOrgFilter
@@ -627,7 +627,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const maxOrgWidth = pageWidth - 60; // leave margins
   const orgLines = doc.splitTextToSize(orgText, maxOrgWidth);
   // Choose font size based on number of lines
-  const orgFontSize = orgLines.length === 1 ? 20 : orgLines.length === 2 ? 16 : 14;
+  const orgFontSize = orgLines.length === 1 ? 16 : orgLines.length === 2 ? 12 : 14;
   doc.setFontSize(orgFontSize);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(11, 91, 209); // NPA blue
@@ -767,7 +767,12 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         didDrawPage: (data) => {
           // Add repeating watermark pattern
           doc.saveGraphicsState();
-          doc.setGState(new doc.GState({ opacity: 0.06 }));
+          // jsPDF typings for GState can be absent depending on the installed types — use any to avoid TS errors
+          try {
+            (doc as any).setGState(new (doc as any).GState({ opacity: 0.06 }));
+          } catch (e) {
+            // If GState or setGState isn't available, silently continue without watermark opacity adjustment
+          }
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(40);
           doc.setTextColor(41, 128, 185);
@@ -1097,6 +1102,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                     value={bulkFormData.date}
                     onChange={(e: { target: { value: any; }; }) => setBulkFormData({ ...bulkFormData, date: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                    title="Bulk Date"
+                    aria-label="Bulk Date"
                     required
                   />
                 </div>
@@ -1188,6 +1195,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                     value={formData.date}
                     onChange={(e: { target: { value: string; }; }) => handleInputChange('date', e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                    title="Date"
+                    aria-label="Date"
                     required
                   />
                 </div>
@@ -1264,6 +1273,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                 value={reportStartDate}
                 onChange={e => setReportStartDate(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                title="Start Date"
+                aria-label="Start Date"
               />
             </div>
             <div className="space-y-2">
@@ -1274,6 +1285,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                 value={reportEndDate}
                 onChange={e => setReportEndDate(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                title="End Date"
+                aria-label="End Date"
               />
             </div>
             <Button onClick={handleGenerateReport} disabled={!selectedOrgId}>
@@ -1433,11 +1446,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <DialogTitle>
-                    Organization Report: <span
-                      className="text-red-900"
-                      title={getOrganizationName(selectedOrgId)}
-                      style={{ display: '-webkit-box' as any, WebkitLineClamp: 2 as any, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}
-                    >
+                    Organization Report: <span className="text-red-900 org-clamp" title={getOrganizationName(selectedOrgId)}>
                       {getOrganizationName(selectedOrgId)}
                     </span>
                   </DialogTitle>
@@ -1465,6 +1474,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                 .report-scroll::-webkit-scrollbar-track { background: transparent; }
                 .report-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 8px; }
                 .report-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.36); }
+                /* Clamp long organization name in the dialog header to two lines */
+                .org-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
               `}</style>
 
               <div ref={scrollContainerRef} onScroll={handleReportScroll} className="flex-1 report-scroll overflow-auto px-6 pb-6 relative">
