@@ -402,6 +402,16 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           return true;
         });
       }
+      // Sort the filtered records by device serial number so reports are ordered by serial
+      try {
+        filtered.sort((a: any, b: any) => {
+          const sa = getDeviceSerial(a.device_id) || '';
+          const sb = getDeviceSerial(b.device_id) || '';
+          return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
+        });
+      } catch (e) {
+        // if devices not loaded or comparator fails, silently continue without sorting
+      }
       setOrgReport(filtered);
       setReportDialogOpen(true);
     } catch (error) {
@@ -413,6 +423,16 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const getDeviceName = (deviceId: string) => {
     const device = devices.find((d: { id: string; }) => d.id === deviceId);
     return device ? device.name : 'Unknown';
+  };
+
+  const getDeviceSerial = (deviceId: string) => {
+    const device = devices.find((d: { id: string; }) => d.id === deviceId) as any;
+    return device ? (device.serial_number || '-') : '-';
+  };
+
+  const getDeviceBrandSerial = (deviceId: string) => {
+    const device = devices.find((d: { id: string; }) => d.id === deviceId) as any;
+    return device ? ((device as any).brand_serial_number || '-') : '-';
   };
 
   const getTechnicianName = (techId: string) => {
@@ -490,6 +510,17 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     }
 
     try {
+      // If records provided may not be ordered; sort by serial no for printable report
+      try {
+        recordsToPrint.sort((a: any, b: any) => {
+          const sa = getDeviceSerial(a.device_id) || '';
+          const sb = getDeviceSerial(b.device_id) || '';
+          return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
+        });
+      } catch (e) {
+        // ignore sort errors
+      }
+
       // Set A4 portrait explicitly
       const doc = new jsPDF({ format: 'a4', unit: 'mm', orientation: 'portrait' });
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -686,16 +717,33 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           month: 'short',
           year: 'numeric'
         }),
-        getDeviceName(record.device_id),
+        getDeviceSerial(record.device_id),
+        getDeviceBrandSerial(record.device_id),
         getTechnicianName(record.technician_id),
-        record.status || 'Yet to Start',
-        record.description || 'Routine maintenance'
+        record.description || 'Routine maintenance',
+        record.status || 'Yet to Start'
       ]);
+      // Compute column widths dynamically to use full content width (page minus margins)
+      const leftMargin = 15;
+      const rightMargin = 15;
+      const contentWidth = pageWidth - leftMargin - rightMargin;
+      // Base widths (mm) for fixed columns
+      const col0 = 14;   // # (wider so multi-digit row numbers don't stack)
+      const col1 = 22;  // Service Date
+      const col2 = 36;  // Serial No (wider to avoid wrapping)
+      const col3 = 30;  // Brand Serial No
+      const col6 = 24;  // Status
+      // Technician slightly larger than before
+      const col4 = 18;  // Technician
+      // Service Note takes remaining space but at least 24mm
+      const remaining = contentWidth - (col0 + col1 + col2 + col3 + col4 + col6);
+      const col5 = Math.max(24, remaining);
+
       // Add table using autoTable
-    autoTable(doc, {
-  startY: summaryY + 18,
-        head: [['#', 'Service Date', 'Device Name', 'Technician', 'Status', 'Service Notes']],
-        body: tableData,
+      autoTable(doc, {
+    startY: summaryY + 18,
+          head: [['#', 'Service Date', 'Serial No', 'Brand Serial No', 'Technician', 'Service Note', 'Status']],
+          body: tableData,
         theme: 'striped',
         headStyles: {
           fillColor: [41, 128, 185], // Professional blue
@@ -708,29 +756,32 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         bodyStyles: {
           fontSize: 8,
           textColor: [40, 40, 40],
-          cellPadding: 2.5
+          cellPadding: 3,
+          valign: 'middle'
         },
         alternateRowStyles: {
           fillColor: [249, 249, 249]
         },
         columnStyles: {
-          0: { cellWidth: 8, halign: 'center', fontStyle: 'bold' },  // #
-          1: { cellWidth: 22, halign: 'center' },  // Service Date
-          2: { cellWidth: 32, halign: 'left' },    // Device Name
-          3: { cellWidth: 28, halign: 'left' },    // Technician
-          4: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },  // Status
-          5: { cellWidth: pageWidth - 15 - 15 - 8 - 22 - 32 - 28 - 24 - 2, halign: 'left' } // Service Notes (fill remaining)
+          0: { cellWidth: col0, halign: 'center', fontStyle: 'bold' },
+          1: { cellWidth: col1, halign: 'center' },
+          2: { cellWidth: col2, halign: 'center' },
+          3: { cellWidth: col3, halign: 'center' },
+          4: { cellWidth: col4, halign: 'left' },
+          5: { cellWidth: col5, halign: 'left' },
+          6: { cellWidth: col6, halign: 'center', fontStyle: 'bold' }
         },
-        margin: { left: 15, right: 15 },
+        margin: { left: leftMargin, right: rightMargin },
         styles: {
           overflow: 'linebreak',
-          cellPadding: 2.5,
+          cellPadding: 3,
+          valign: 'middle',
           lineColor: [220, 220, 220],
           lineWidth: 0.1
         },
         didDrawCell: (data) => {
-          // Color code the status column (column 4)
-          if (data.column.index === 4 && data.section === 'body') {
+          // Color code the status column (last column index 6)
+          if (data.column.index === 6 && data.section === 'body') {
             const status = data.cell.raw as string;
             let fillColor: [number, number, number] = [249, 249, 249]; // default gray
             let textColor: [number, number, number] = [100, 100, 100];
@@ -1355,33 +1406,17 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                           <TableHead>Device</TableHead>
                           <TableHead>Technician</TableHead>
                           <TableHead>Organization</TableHead>
-                          <TableHead>Status</TableHead>
                           <TableHead>Notes</TableHead>
+                          <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {paginatedMaintenance.map((record: { id: any; created_at: string | number | Date; device_id: string; technician_id: string; organization_id: string; status: string; description: any; }) => (
+                          {paginatedMaintenance.map((record: { id: any; created_at: string | number | Date; device_id: string; technician_id: string; organization_id: string; status: string; description: any; }) => (
                           <TableRow key={record.id} className="py-2">
                             <TableCell className="py-2 text-sm">{new Date(record.created_at).toLocaleDateString()}</TableCell>
                             <TableCell>{getDeviceName(record.device_id)}</TableCell>
                             <TableCell>{getTechnicianName(record.technician_id)}</TableCell>
                             <TableCell>{getOrganizationName(record.organization_id)}</TableCell>
-                            <TableCell>
-                              <Select
-                                value={record.status}
-                                onValueChange={(value: string) => handleStatusChange(record.id, value)}
-                              >
-                                <SelectTrigger className={`w-[140px] ${getStatusColor(record.status)}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Yet to Start" className="bg-gray-100 text-gray-800">Yet to Start</SelectItem>
-                                  <SelectItem value="In Progress" className="bg-yellow-100 text-yellow-800">In Progress</SelectItem>
-                                  <SelectItem value="Completed" className="bg-green-100 text-green-800">Completed</SelectItem>
-                                  <SelectItem value="Cancelled" className="bg-red-100 text-red-800">Cancelled</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
                             <TableCell className="max-w-[360px]">
                               {editingNotesId === record.id ? (
                                 <div className="space-y-2">
@@ -1403,6 +1438,22 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                                   <Button size="sm" variant="ghost" onClick={() => startEditNotes(record as any)}>Edit</Button>
                                 </div>
                               )}
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={record.status}
+                                onValueChange={(value: string) => handleStatusChange(record.id, value)}
+                              >
+                                <SelectTrigger className={`w-[140px] ${getStatusColor(record.status)}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Yet to Start" className="bg-gray-100 text-gray-800">Yet to Start</SelectItem>
+                                  <SelectItem value="In Progress" className="bg-yellow-100 text-yellow-800">In Progress</SelectItem>
+                                  <SelectItem value="Completed" className="bg-green-100 text-green-800">Completed</SelectItem>
+                                  <SelectItem value="Cancelled" className="bg-red-100 text-red-800">Cancelled</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1498,10 +1549,12 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                           <TableRow>
                             <TableHead></TableHead>
                             <TableHead>Date</TableHead>
+                            <TableHead>Serial No</TableHead>
+                            <TableHead>Brand Serial No</TableHead>
                             <TableHead>Device</TableHead>
                             <TableHead>Technician</TableHead>
-                            <TableHead>Status</TableHead>
                             <TableHead>Notes</TableHead>
+                            <TableHead>Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1511,12 +1564,14 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                                 <input type="checkbox" title="Select record" aria-label="Select maintenance record" checked={selectedReportIds.includes(record.id)} onChange={() => handleReportSelect(record.id)} />
                               </TableCell>
                               <TableCell>{new Date(record.created_at).toLocaleDateString('en-IN')}</TableCell>
+                              <TableCell>{getDeviceSerial(record.device_id)}</TableCell>
+                              <TableCell>{getDeviceBrandSerial(record.device_id)}</TableCell>
                               <TableCell>{getDeviceName(record.device_id)}</TableCell>
                               <TableCell>{getTechnicianName(record.technician_id)}</TableCell>
+                              <TableCell className="max-w-[360px] whitespace-pre-wrap break-words">{record.description || '-'}</TableCell>
                               <TableCell>
                                 <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusColor(record.status)}`}>{record.status}</span>
                               </TableCell>
-                              <TableCell>{record.description || '-'}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
