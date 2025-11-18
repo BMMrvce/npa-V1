@@ -90,9 +90,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <div className="flex-1 flex items-center justify-center bg-white px-4 sm:px-6 lg:px-20 xl:px-24">
         <div className="w-full max-w-md">
           {/* Title (logo removed per request) */}
-          <div className="flex items-center gap-2 mb-8">
+          {/* <div className="flex items-center gap-2 mb-8">
             <span className="text-2xl font-semibold text-gray-900">NPA</span>
-          </div>
+          </div> */}
 
           {/* Welcome Text */}
           <div className="mb-8">
