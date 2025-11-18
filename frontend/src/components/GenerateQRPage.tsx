@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { jsPDF } from 'jspdf';
 import { Button } from './ui/button';
 
 interface Device {
@@ -87,6 +88,21 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
     }
   };
 
+  // Generate higher-resolution QR images for printing/PDF to improve scanner reliability
+  const generatePrintQRs = async (devs: Device[], size = 800): Promise<Record<string, string>> => {
+    const map: Record<string, string> = {};
+    await Promise.all(devs.map(async (dev) => {
+      const content = `${dev.serial_number || dev.code || dev.id}`;
+      try {
+        const dataUrl = await QRCode.toDataURL(content, { width: size, margin: 2 });
+        map[dev.id] = dataUrl;
+      } catch (e) {
+        console.error('QR print error', e);
+      }
+    }));
+    return map;
+  };
+
   // auto-generate QR images for all devices in the selected organization (QRs are static)
   useEffect(() => {
     let cancelled = false;
@@ -140,9 +156,24 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
     // ensure QR images are generated
     if (!selectedOrg) return;
     let imageMap: Record<string, string> = qrImages;
-    if (Object.keys(qrImages).length === 0) {
-      const generated = await generateQRs();
-      if (generated) imageMap = generated;
+    // For print, always generate fresh high-resolution images for the selected devices to
+    // guarantee consistent output across organizations and avoid mixing preview/resized images.
+    const devicesToPrint = selectedDevicesSorted;
+    if (devicesToPrint.length > 0) {
+      try {
+        // fixed size ensures consistency across orgs
+        const hiRes = await generatePrintQRs(devicesToPrint, 1000);
+        imageMap = hiRes; // use only high-res images for printing/PDF
+      } catch (e) {
+        console.error('Failed to generate high-res QR images for print', e);
+        // fallback: use existing preview images or lower-res generation
+        if (Object.keys(qrImages).length === 0) {
+          const generated = await generateQRs();
+          if (generated) imageMap = generated;
+        } else {
+          imageMap = qrImages;
+        }
+      }
     }
 
     const org = organizations.find(o => o.id === selectedOrg);
@@ -164,19 +195,22 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
       return `<div class="page">${headerHtml}${itemsHtml}</div>`;
     }).join('\n');
 
-    const html = `
+      const html = `
       <html>
         <head>
           <title>QR Codes - ${org?.name || ''}</title>
             <style>
-            body { font-family: system-ui, -apple-system,   'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 20px; }
+            /* Set default printed page to A4 landscape */
+            @page { size: A4 landscape; margin: 8mm; }
+            @media print { html, body { width: 297mm; height: 210mm; } body { margin:0; padding:0; } .page { page-break-after: auto; } .page:not(:last-child) { page-break-after: always; } }
+            body { font-family: system-ui, -apple-system,   'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 0; margin: 0; }
             /* page grid: header spans full width then items in 4 columns for 12 per page */
-            .page { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; page-break-after: always; grid-auto-rows: min-content; justify-items: center; }
-            .org-header { grid-column: 1 / -1; text-align: center; font-size: 20px; font-weight: 600; margin: 8px 0 4px 0; color: #2563eb; }
-            .qr-item { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top: 8px; }
-            /* larger print QR for better readability on paper */
-            .qr-img img { width: 160px; height:160px; object-fit:contain; background: #79bee6ff; padding:6px; }
-            .qr-label { margin-top: 10px; font-size: 12px; text-align:center; font-family: 'Segoe UI', Roboto, Arial, sans-serif; }
+            .page { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; grid-auto-rows: min-content; justify-items: center; box-sizing: border-box; height: calc(210mm - 24mm); padding: 12mm 16mm 10mm 16mm; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; }
+            .org-header { grid-column: 1 / -1; text-align: center; font-size: 16px; font-weight: 700; margin: 6px 0 12px 0; color: #1e90ff; text-transform: uppercase; letter-spacing: 1px; }
+            .qr-item { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top: 2px; }
+            /* slightly smaller print QR and cleaner label spacing to match sample */
+            .qr-img img { width: 160px; height:160px; object-fit:contain; background: transparent; padding:0; display:block; }
+            .qr-label { margin-top: 6px; font-size: 10px; text-align:center; font-family: 'Segoe UI', Roboto, Arial, sans-serif; color: #333; }
             @media print { body { margin:0; } .no-print { display:none; } }
           </style>
         </head>
@@ -185,6 +219,17 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
         </body>
       </html>
     `;
+
+    // If there are 12 or fewer items, prefer a PDF fallback to avoid browser print inconsistencies
+    if (selectedDevicesSorted.length > 0 && selectedDevicesSorted.length <= 12) {
+      try {
+        await generatePdfAndOpenOrPrint(selectedDevicesSorted, imageMap, org?.name || 'qr-codes');
+        return;
+      } catch (e) {
+        console.error('PDF fallback failed, falling back to HTML print', e);
+        // continue to HTML print as fallback
+      }
+    }
 
     const win = window.open('', '_blank');
     if (win) {
@@ -196,6 +241,85 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
         win.print();
       }, 500);
     }
+  };
+
+  // Generate a PDF using jsPDF and either open it in a new tab and trigger print,
+  // or fall back to prompting a download. This is more reliable across browsers.
+  const generatePdfAndOpenOrPrint = async (items: Device[], imageMap: Record<string, string>, orgName: string) => {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+    const pageWidth = 297;
+    const pageHeight = 210;
+    const margin = 8; // mm
+    const availW = pageWidth - margin * 2;
+    const availH = pageHeight - margin * 2;
+    const cols = 4;
+    const rows = 3;
+    const gap = 8; // mm
+    const headerH = 12;
+    const cellW = (availW - gap * (cols - 1)) / cols;
+    const cellH = (availH - headerH - gap * (rows - 1)) / rows;
+
+    const imageMaxW = Math.min(50, cellW - 10);
+    const imageMaxH = Math.min(50, cellH - 18);
+
+    // chunk items into pages of cols*rows
+    const pages = [] as Device[][];
+    for (let i = 0; i < items.length; i += cols * rows) pages.push(items.slice(i, i + cols * rows));
+
+    for (let p = 0; p < pages.length; p++) {
+      if (p > 0) doc.addPage();
+      // header
+      doc.setFontSize(14);
+      doc.setTextColor(37, 99, 235);
+      doc.text(orgName || '', pageWidth / 2, margin + 8, { align: 'center' });
+
+      const pageItems = pages[p];
+      for (let idx = 0; idx < pageItems.length; idx++) {
+        const row = Math.floor(idx / cols);
+        const col = idx % cols;
+        const x = margin + col * (cellW + gap);
+        const y = margin + headerH + row * (cellH + gap);
+
+        const dev = pageItems[idx];
+        const img = imageMap[dev.id] || '';
+        if (img) {
+          try {
+            const imgW = imageMaxW;
+            const imgH = imageMaxH;
+            const imgX = x + (cellW - imgW) / 2;
+            const imgY = y + 4;
+            doc.addImage(img, 'PNG', imgX, imgY, imgW, imgH);
+          } catch (e) {
+            console.error('addImage error', e);
+          }
+        }
+
+        // label
+        const label = (dev.serial_number || dev.code || dev.id || '').toString();
+        doc.setFontSize(9);
+        const labelX = x + cellW / 2;
+        const labelY = y + (imageMaxH || 40) + 10;
+        doc.setTextColor(51, 51, 51);
+        doc.text(label, labelX, labelY, { align: 'center', maxWidth: cellW - 4 });
+      }
+    }
+
+    // Try to open in new tab and print
+    try {
+      const blob = doc.output('blob');
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (w) {
+        // some browsers block auto-print on blob URLs — attempt it
+        setTimeout(() => { try { w.print(); } catch (e) { /* ignore */ } }, 700);
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to open PDF blob', e);
+    }
+
+    // fallback: trigger download
+    doc.save(`${orgName || 'qr-codes'}.pdf`);
   };
 
   return (
@@ -243,7 +367,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
       </div>
 
       {/* print styles */}
-      <style>{`@media print { .no-print { display: none; } .page { page-break-after: always; } }`}</style>
+      <style>{`@media print { .no-print { display: none; } html, body { width: 297mm; height: 210mm; } body { margin:0; padding:0; background: #fff } .page { page-break-after: auto; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; box-sizing: border-box; height: calc(210mm - 24mm); padding: 12mm 16mm 10mm 16mm; } .page:not(:last-child) { page-break-after: always; } .org-header { text-transform: uppercase; letter-spacing: 1px; color:#1e90ff; font-weight:700; } .qr-img img { width:140px; height:140px } .qr-label { font-size:10px } }`}</style>
 
       <div>
   {devicesForOrgSorted.length === 0 && <div className="text-sm text-gray-500">No devices for selected organization.</div>}
