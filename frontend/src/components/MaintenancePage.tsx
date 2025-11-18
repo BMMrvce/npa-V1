@@ -551,10 +551,34 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         }
       }
 
-      // Try common public path for the logo. Place your PNG at `frontend/public/npa-logo.png` so it's served at '/npa-logo.png'
-      const logoData = await loadImageDataUrl(`${window.location.origin}/npa-logo.png`);
+      // Try several common public paths for the logo. Place your PNG/SVG at `frontend/public/npa-logo.png` or `npa-logo.svg` so it's served at '/npa-logo.*'
+      const candidateUrls = [
+        `${window.location.origin}/npa-logo.png`,
+        `${window.location.origin}/npa-logo.svg`,
+        `/npa-logo.png`,
+        `/npa-logo.svg`,
+        `${window.location.origin}/public/npa-logo.png`,
+        `${window.location.origin}/public/npa-logo.svg`,
+        `./npa-logo.png`,
+        `./npa-logo.svg`
+      ];
+
+      let logoData: string | null = null;
+      let resolvedLogoUrl: string | null = null;
+      for (const u of candidateUrls) {
+        const data = await loadImageDataUrl(u);
+        if (data) {
+          logoData = data;
+          resolvedLogoUrl = u;
+          break;
+        }
+      }
 
       const hasLogo = !!logoData;
+      if (!hasLogo) {
+        // Helpful console message for debugging when logo isn't found
+        console.warn('NPA logo not found at standard public paths. Checked:', candidateUrls.join(', '));
+      }
       if (logoData) {
         try {
           doc.addImage(logoData, 'PNG', logoX, logoY, logoW, logoH);

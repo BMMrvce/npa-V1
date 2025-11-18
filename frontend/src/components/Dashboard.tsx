@@ -48,7 +48,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ token, user, onLogout }) =
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
               <ImageWithFallback
-                src="/brand-logo.png"
+                src="/npa-logo.png"
                 alt="Brand Logo"
                 className="w-10 h-10 rounded-md object-contain border border-gray-200 bg-white"
               />

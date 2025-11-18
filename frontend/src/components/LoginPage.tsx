@@ -89,13 +89,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       {/* Left Side - Login Form */}
       <div className="flex-1 flex items-center justify-center bg-white px-4 sm:px-6 lg:px-20 xl:px-24">
         <div className="w-full max-w-md">
-          {/* Logo */}
+          {/* Title (logo removed per request) */}
           <div className="flex items-center gap-2 mb-8">
-            <ImageWithFallback
-              src="/brand-logo.png"
-              alt="Brand Logo"
-              className="w-10 h-10 rounded-md object-contain border border-gray-200"
-            />
             <span className="text-2xl font-semibold text-gray-900">NPA</span>
           </div>
 
@@ -216,11 +211,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         {/* Content */}
         <div className="relative z-10 flex items-center justify-center w-full p-12">
           <div className="text-white text-center max-w-lg">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm mb-8">
+            <div className="inline-flex items-center justify-center w-28 h-28 rounded-full bg-white/20 backdrop-blur-sm mb-8">
               <ImageWithFallback
-                src="/brand-logo.png"
+                src="/npa-logo.png"
                 alt="Brand Logo"
-                className="w-14 h-14 object-contain"
+                className="w-24 h-24 object-contain"
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'center' , fontWeight:'Bold'}}>
