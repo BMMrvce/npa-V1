@@ -51,7 +51,7 @@ deno run --allow-net --allow-env --allow-read index.ts
 Terminal B — Frontend:
 
 ```bash
-cd frontend
+cd fronten
 npm run dev
 # open http://localhost:5173
 ```
