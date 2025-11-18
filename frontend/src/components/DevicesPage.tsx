@@ -458,6 +458,11 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
             .org-title .contact { font-size:14px; color:#111; margin-top:6px }
             /* thicker separator like the image */
             .sep { height:3px; background:#d1d5db; margin:18px 0; width:100%; }
+            /* Watermark (logo) - hidden in preview, shown only when printing */
+            .watermark { display:none; }
+            @media print {
+              .watermark { display:block; position:fixed; left:50%; top:40%; transform:translate(-50%,-50%) rotate(-25deg); width:260px; opacity:0.08; pointer-events:none; z-index:0 }
+            }
             /* Report title and org box styling */
             .report-title { text-align:center; margin-top:6px; font-weight:700; font-size:14px; color:#2c3e50 }
             .org-box { background:transparent; padding:8px; border-radius:6px; margin-top:8px; text-align:center; font-weight:700; color:#2563eb }
@@ -489,7 +494,10 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
           </div>
           <div class="sep"></div>
 
-          <div class="report-title">MAINTENANCE SERVICE REPORT</div>
+          <!-- Watermark (print-only logo) -->
+          <img src="/npa-logo.png" class="watermark" onerror="this.style.display='none'" alt="NPA watermark" />
+
+          <div class="report-title">DEVICE SERVICE REPORT</div>
           <div class="org-box">${orgName.toUpperCase()}</div>
 
           <div class="meta">
