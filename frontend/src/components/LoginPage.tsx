@@ -5,6 +5,7 @@ import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { createClient } from '../utils/supabase/client';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { Bold } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess: (token: string, user: any) => void;
@@ -180,8 +181,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               {loading ? 'Please wait...' : (isLogin ? 'Login' : 'Sign up')}
             </Button>
           </form>
-
-          <div className="mt-6 text-center">
+            {/* uncomment this if you need to enable the signup feature in future */}
+          {/* <div className="mt-6 text-center">
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
@@ -199,7 +200,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </>
               )}
             </button>
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -222,13 +223,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 className="w-14 h-14 object-contain"
               />
             </div>
-            <h2 className="text-4xl mb-4 text-white">
-              Welcome to NPA Admin
+            <div style={{ display: 'flex', justifyContent: 'center' , fontWeight:'Bold'}}>
+            <h2 className="text-4xl mb-4 text-white ">
+              Welcome! ADMIN
             </h2>
+            </div>
             <p className="text-xl text-white/90 mb-8">
               Manage your water dispenser systems, track maintenance, and monitor devices all in one place.
             </p>
-            <div className="flex gap-4 justify-center">
+            {/* <div className="flex gap-4 justify-center">
               <div className="text-center">
                 <div className="text-3xl mb-1 text-white">500+</div>
                 <div className="text-sm text-white/80">Active Devices</div>
@@ -243,7 +246,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <div className="text-3xl mb-1 text-white">50+</div>
                 <div className="text-sm text-white/80">Technicians</div>
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
