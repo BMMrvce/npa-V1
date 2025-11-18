@@ -521,8 +521,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         // ignore sort errors
       }
 
-      // Set A4 portrait explicitly
-      const doc = new jsPDF({ format: 'a4', unit: 'mm', orientation: 'portrait' });
+      // Set A4 landscape explicitly
+      const doc = new jsPDF({ format: 'a4', unit: 'mm', orientation: 'landscape' });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const orgName = getOrganizationName(selectedOrgId);
@@ -733,11 +733,11 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       const col2 = 36;  // Serial No (wider to avoid wrapping)
       const col3 = 30;  // Brand Serial No
       const col6 = 24;  // Status
-      // Technician slightly larger than before
-      const col4 = 18;  // Technician
-      // Service Note takes remaining space but at least 24mm
+      // Technician made broader to reduce wrapping; Service Note a bit smaller
+      const col4 = 28;  // Technician (increased)
+      // Service Note takes remaining space but at least 18mm (shrunk a bit)
       const remaining = contentWidth - (col0 + col1 + col2 + col3 + col4 + col6);
-      const col5 = Math.max(24, remaining);
+      const col5 = Math.max(18, remaining);
 
       // Add table using autoTable
       autoTable(doc, {
