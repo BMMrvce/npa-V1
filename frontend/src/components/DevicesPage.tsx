@@ -28,6 +28,7 @@ interface Device {
   status?: string;
   is_archived?: boolean;
   created_at: string;
+  device_type?: string;
 }
 
 interface Organization {
@@ -78,6 +79,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
     serialNumber: '', // kept for display in edit dialog but not submitted on create
     brandSerialNumber: '',
     model: '',
+    deviceType: 'Comprehensive',
   });
 
   const fetchDevices = async () => {
@@ -184,6 +186,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
         organizationId: formData.organizationId,
         brandSerialNumber: formData.brandSerialNumber,
         model: formData.model,
+        deviceType: formData.deviceType,
           }),
         }
       );
@@ -205,6 +208,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
         serialNumber: '',
         brandSerialNumber: '',
         model: '',
+        deviceType: 'Comprehensive',
       });
       fetchDevices();
     } catch (error) {
@@ -266,6 +270,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
             brandSerialNumber: (device as any).brand_serial_number || '',
             model: device.model || '',
             status: device.status || 'active',
+            deviceType: (device as any).device_type || 'Comprehensive',
             is_archived: newArchivedStatus
           }),
         }
@@ -299,6 +304,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
       serialNumber: device.serial_number || '',
       brandSerialNumber: (device as any).brand_serial_number || '',
       model: device.model || '',
+      deviceType: (device as any).device_type || 'Comprehensive',
     });
     setEditDialogOpen(true);
   };
@@ -587,6 +593,21 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="deviceType">Device Type *</Label>
+                <Select
+                  value={formData.deviceType}
+                  onValueChange={(value: string) => handleInputChange('deviceType', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select device type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Comprehensive">Comprehensive</SelectItem>
+                    <SelectItem value="Non Comprehensive">Non Comprehensive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="organization">Organization *</Label>
                 <Select
                   value={formData.organizationId}
@@ -654,6 +675,21 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
                 value={formData.model}
                 onChange={(e) => handleInputChange('model', e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-deviceType">Device Type *</Label>
+              <Select
+                value={formData.deviceType}
+                onValueChange={(value: string) => handleInputChange('deviceType', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select device type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Comprehensive">Comprehensive</SelectItem>
+                  <SelectItem value="Non Comprehensive">Non Comprehensive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-organization">Organization *</Label>

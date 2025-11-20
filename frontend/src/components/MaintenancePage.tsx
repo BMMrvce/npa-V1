@@ -24,6 +24,7 @@ interface MaintenanceRecord {
   organization_id: string;
   description: string;
   status: string;
+  charges?: number;
   created_at: string;
 }
 
@@ -71,6 +72,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     technicianId: '',
     notes: '',
     date: new Date().toISOString().split('T')[0],
+    charges: '',
   });
   const [bulkFormData, setBulkFormData] = useState({
     technicianId: '',
@@ -290,6 +292,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           body: JSON.stringify({
             ...formData,
             organizationId: formData.organizationId || selectedDevice.organization_id,
+            charges: formData.charges && formData.charges !== '' ? parseFloat(String(formData.charges)) : null,
           }),
         }
       );
@@ -310,6 +313,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         technicianId: '',
         notes: '',
         date: new Date().toISOString().split('T')[0],
+        charges: '',
       });
       fetchMaintenance();
     } catch (error) {
@@ -533,6 +537,10 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     next.setDate(next.getDate() + 90);
     return next.toLocaleDateString('en-IN');
   }
+
+  const totalSelectedCharges = selectedReportIds.length > 0
+    ? orgReport.filter(r => selectedReportIds.includes(r.id)).reduce((s, r) => s + (Number((r as any).charges) || 0), 0)
+    : orgReport.reduce((s, r) => s + (Number((r as any).charges) || 0), 0);
 
   const generatePDF = async (recordsOverride?: any[]) => {
     const recordsToPrint = recordsOverride || (selectedReportIds.length > 0
@@ -765,10 +773,12 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       doc.text(`Devices: ${uniqueDevices}`, 60, summaryY + 12);
       doc.text(`Techs: ${uniqueTechnicians}`, 90, summaryY + 12);
       doc.text(`Next Maintenance: ${nextMaintDate || '-'}`, 120, summaryY + 12);
+      const pdfTotalCharges = recordsToPrint.reduce((s: number, r: any) => s + (Number(r.charges) || 0), 0);
+      doc.text(`Total Charges: ₹${pdfTotalCharges.toFixed(2)}`, 170, summaryY + 12);
 
       // ========== MAINTENANCE RECORDS TABLE ==========
       // Prepare table data with serial numbers
-      const tableData = recordsToPrint.map((record: { created_at: string | number | Date; device_id: string; technician_id: string; status: string; description: any; }, index: number) => [
+      const tableData = recordsToPrint.map((record: { created_at: string | number | Date; device_id: string; technician_id: string; status: string; description: any; charges?: number }, index: number) => [
         String(index + 1),
         new Date(record.created_at).toLocaleDateString('en-IN', {
           day: '2-digit',
@@ -777,6 +787,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         }),
         getDeviceSerial(record.device_id),
         getDeviceBrandSerial(record.device_id),
+        (record.charges != null ? `₹${Number(record.charges).toFixed(2)}` : '-'),
         getTechnicianName(record.technician_id),
         record.description || 'Routine maintenance',
         record.status || 'Yet to Start'
@@ -785,22 +796,23 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       const leftMargin = 15;
       const rightMargin = 15;
       const contentWidth = pageWidth - leftMargin - rightMargin;
-      // Base widths (mm) for fixed columns
+      // Base widths (mm) for fixed columns (added charges column at index 4)
       const col0 = 14;   // # (wider so multi-digit row numbers don't stack)
       const col1 = 22;  // Service Date
       const col2 = 36;  // Serial No (wider to avoid wrapping)
       const col3 = 30;  // Brand Serial No
-      const col6 = 24;  // Status
+      const col4 = 20;  // Charges
+      const col7 = 24;  // Status (last column)
       // Technician made broader to reduce wrapping; Service Note a bit smaller
-      const col4 = 28;  // Technician (increased)
-      // Service Note takes remaining space but at least 18mm (shrunk a bit)
-      const remaining = contentWidth - (col0 + col1 + col2 + col3 + col4 + col6);
-      const col5 = Math.max(18, remaining);
+      const col5 = 28;  // Technician (increased)
+      // Service Note takes remaining space but at least 18mm
+      const remaining = contentWidth - (col0 + col1 + col2 + col3 + col4 + col5 + col7);
+      const col6 = Math.max(18, remaining);
 
       // Add table using autoTable
       autoTable(doc, {
-    startY: summaryY + 18,
-          head: [['#', 'Service Date', 'Serial No', 'Brand Serial No', 'Technician', 'Service Note', 'Status']],
+        startY: summaryY + 18,
+          head: [['#', 'Service Date', 'Serial No', 'Brand Serial No', 'Charges', 'Technician', 'Service Note', 'Status']],
           body: tableData,
         theme: 'striped',
         headStyles: {
@@ -825,9 +837,10 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           1: { cellWidth: col1, halign: 'center' },
           2: { cellWidth: col2, halign: 'center' },
           3: { cellWidth: col3, halign: 'center' },
-          4: { cellWidth: col4, halign: 'left' },
+          4: { cellWidth: col4, halign: 'right' },
           5: { cellWidth: col5, halign: 'left' },
-          6: { cellWidth: col6, halign: 'center', fontStyle: 'bold' }
+          6: { cellWidth: col6, halign: 'left' },
+          7: { cellWidth: col7, halign: 'center', fontStyle: 'bold' }
         },
         margin: { left: leftMargin, right: rightMargin },
         styles: {
@@ -1388,6 +1401,21 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                     rows={4}
                   />
                 </div>
+                {formData.deviceId && getDeviceType(formData.deviceId) === 'Non Comprehensive' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="charges">Charges (₹)</Label>
+                    <input
+                      id="charges"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={String(formData.charges)}
+                      onChange={(e: { target: { value: any; }; }) => handleInputChange('charges', e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      placeholder="Enter service charge"
+                    />
+                  </div>
+                )}
                 <Button
                   type="submit"
                   className="w-full"
@@ -1534,6 +1562,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                           <TableHead>Technician</TableHead>
                           <TableHead>Organization</TableHead>
                           <TableHead>Notes</TableHead>
+                          <TableHead>Charges</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1566,7 +1595,10 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                                 </div>
                               )}
                             </TableCell>
-                            <TableCell>
+                              <TableCell className="text-right font-medium">
+                                {(record as any).charges ? `₹${Number((record as any).charges).toFixed(2)}` : '-'}
+                              </TableCell>
+                              <TableCell>
                               <Select
                                 value={record.status}
                                 onValueChange={(value: string) => handleStatusChange(record.id, value)}
@@ -1665,6 +1697,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <p className="text-sm text-gray-600">Total Maintenance Records: <span className="font-semibold">{orgReport.length}</span></p>
                       <p className="text-sm text-gray-600 mt-2">Next Maintenance Date: <span className="font-bold">{getNextMaintenanceDate(orgReport) || '-'}</span></p>
+                      <p className="text-sm text-gray-600 mt-2">Total Charges: <span className="font-semibold">{`₹${totalSelectedCharges.toFixed(2)}`}</span></p>
                     </div>
 
                     <p className="text-sm text-gray-600">Showing <span className="font-semibold">{orgReport.length === 0 ? 0 : (Math.min((reportPage) * reportPageSize, orgReport.length) - (reportPageSize - 1) > orgReport.length ? orgReport.length : (reportPage - 1) * reportPageSize + 1)}</span> to <span className="font-semibold">{Math.min(reportPage * reportPageSize, orgReport.length)}</span> of <span className="font-semibold">{orgReport.length}</span> records. <span className="ml-2">Page <span className="font-semibold">{reportPage}</span> of <span className="font-semibold">{reportTotalPages}</span></span></p>
@@ -1678,6 +1711,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                             <TableHead>Date</TableHead>
                             <TableHead>Serial No</TableHead>
                             <TableHead>Brand Serial No</TableHead>
+                            <TableHead>Charges</TableHead>
                             <TableHead>Device</TableHead>
                             <TableHead>Technician</TableHead>
                             <TableHead>Notes</TableHead>
@@ -1693,6 +1727,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                               <TableCell>{new Date(record.created_at).toLocaleDateString('en-IN')}</TableCell>
                               <TableCell>{getDeviceSerial(record.device_id)}</TableCell>
                               <TableCell>{getDeviceBrandSerial(record.device_id)}</TableCell>
+                              <TableCell className="text-right">{(record as any).charges ? `₹${Number((record as any).charges).toFixed(2)}` : '-'}</TableCell>
                               <TableCell>{getDeviceName(record.device_id)}</TableCell>
                               <TableCell>{getTechnicianName(record.technician_id)}</TableCell>
                               <TableCell className="max-w-[360px] whitespace-pre-wrap break-words">{record.description || '-'}</TableCell>
