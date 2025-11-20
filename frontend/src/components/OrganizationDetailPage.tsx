@@ -5,6 +5,7 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
@@ -89,6 +90,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
     serialNumber: '', // kept for display in edit dialog but not submitted on create
     brandSerialNumber: '',
     model: '',
+    deviceType: 'Comprehensive',
   });
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyDevice, setHistoryDevice] = useState<Device | null>(null);
@@ -193,6 +195,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
             organizationId: organizationId,
             brandSerialNumber: formData.brandSerialNumber,
             model: formData.model,
+            deviceType: formData.deviceType,
           }),
         }
       );
@@ -373,6 +376,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
       serialNumber: device.serial_number,
       brandSerialNumber: (device as any).brand_serial_number || '',
       model: device.model || '',
+      deviceType: (device as any).device_type || 'Comprehensive',
     });
     setEditDialogOpen(true);
   };
@@ -702,6 +706,21 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
                   onChange={(e) => handleInputChange('model', e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="deviceType">Device Type *</Label>
+                <Select
+                  value={formData.deviceType}
+                  onValueChange={(value: string) => handleInputChange('deviceType', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select device type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Comprehensive">Comprehensive</SelectItem>
+                    <SelectItem value="Non Comprehensive">Non Comprehensive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Button type="submit" className="w-full">Create Device</Button>
             </form>
           </DialogContent>
@@ -750,6 +769,21 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
                 value={formData.model}
                 onChange={(e) => handleInputChange('model', e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-deviceType">Device Type *</Label>
+              <Select
+                value={formData.deviceType}
+                onValueChange={(value: string) => handleInputChange('deviceType', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select device type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Comprehensive">Comprehensive</SelectItem>
+                  <SelectItem value="Non Comprehensive">Non Comprehensive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Button type="submit" className="w-full">Update Device</Button>
           </form>

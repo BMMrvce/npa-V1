@@ -906,6 +906,30 @@ app.post("/maintenance", requireAuth, async (c) => {
       return c.json({ error: 'Cannot schedule maintenance: No active technicians available. Please add a technician first.' }, 400);
     }
 
+    // If charges provided, validate that device is Non Comprehensive before attempting insert
+    if (charges !== undefined && charges !== null) {
+      const { data: deviceRow, error: deviceErr } = await supabase
+        .from('devices')
+        .select('device_type')
+        .eq('id', deviceId)
+        .single();
+
+      if (deviceErr || !deviceRow) {
+        return c.json({ error: 'Device not found' }, 404);
+      }
+
+      const devType = String(deviceRow.device_type || '').trim().toLowerCase();
+      if (devType !== 'non comprehensive') {
+        return c.json({ error: 'Charges can only be set for Non Comprehensive devices' }, 400);
+      }
+
+      // Validate numeric and non-negative
+      const chargesNum = Number(charges);
+      if (Number.isNaN(chargesNum) || chargesNum < 0) {
+        return c.json({ error: 'Charges must be a non-negative number' }, 400);
+      }
+    }
+
     const maintenanceData = {
       device_id: deviceId,
       technician_id: technicianId,
@@ -923,6 +947,13 @@ app.post("/maintenance", requireAuth, async (c) => {
 
     if (error) {
       console.error('Error creating maintenance record:', error);
+      const msg = (error && (error.message || '')).toString().toLowerCase();
+      if (msg.includes('charges can only be set') || msg.includes('non-comprehensive')) {
+        return c.json({ error: 'Charges can only be set for Non Comprehensive devices' }, 400);
+      }
+      if (msg.includes('numeric') || msg.includes('invalid input syntax for type numeric')) {
+        return c.json({ error: 'Invalid numeric value for charges' }, 400);
+      }
       return c.json({ error: 'Failed to create maintenance record' }, 500);
     }
 
@@ -986,6 +1017,68 @@ app.patch("/maintenance/:id/notes", requireAuth, async (c) => {
   } catch (error) {
     console.log('Error updating maintenance notes:', error);
     return c.json({ error: 'Failed to update notes' }, 500);
+  }
+});
+
+// Update maintenance charges
+app.patch("/maintenance/:id/charges", requireAuth, async (c) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const id = c.req.param('id');
+    const { charges } = await c.req.json();
+
+    if (charges === undefined || charges === null) {
+      return c.json({ error: 'Charges value is required' }, 400);
+    }
+
+    const chargesNum = Number(charges);
+    if (Number.isNaN(chargesNum) || chargesNum < 0) {
+      return c.json({ error: 'Charges must be a non-negative number' }, 400);
+    }
+
+    // Fetch maintenance record to know device_id
+    const { data: existing, error: findErr } = await supabase
+      .from('maintenance')
+      .select('id, device_id')
+      .eq('id', id)
+      .single();
+
+    if (findErr || !existing) {
+      return c.json({ error: 'Maintenance record not found' }, 404);
+    }
+
+    // Check device type
+    const { data: deviceRow, error: deviceErr } = await supabase
+      .from('devices')
+      .select('device_type')
+      .eq('id', existing.device_id)
+      .single();
+
+    if (deviceErr || !deviceRow) {
+      return c.json({ error: 'Device not found' }, 404);
+    }
+
+    const devType = String(deviceRow.device_type || '').trim().toLowerCase();
+    if (devType !== 'non comprehensive') {
+      return c.json({ error: 'Charges can only be set for Non Comprehensive devices' }, 400);
+    }
+
+    const { data: updated, error } = await supabase
+      .from('maintenance')
+      .update({ charges: chargesNum, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating maintenance charges:', error);
+      return c.json({ error: 'Failed to update charges' }, 500);
+    }
+
+    return c.json({ success: true, maintenance: updated });
+  } catch (error) {
+    console.log('Error updating maintenance charges:', error);
+    return c.json({ error: 'Failed to update charges' }, 500);
   }
 });
 

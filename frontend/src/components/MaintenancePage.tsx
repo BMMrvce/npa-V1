@@ -35,6 +35,7 @@ interface Device {
   serial_number?: string;
   model?: string;
   is_archived?: boolean;
+  device_type?: string; // 'Comprehensive' | 'Non Comprehensive'
 }
 
 interface Technician {
@@ -86,6 +87,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const [bulkDeviceSearch, setBulkDeviceSearch] = useState('');
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editingNotesText, setEditingNotesText] = useState<string>('');
+  const [editingChargesId, setEditingChargesId] = useState<string | null>(null);
+  const [editingChargesValue, setEditingChargesValue] = useState<string>('');
   // Pagination for report dialog (page starts at 1)
   const [reportPage, setReportPage] = useState<number>(1);
   const reportPageSize = 10;
@@ -281,6 +284,19 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     }
 
     try {
+      // Frontend validation for charges: only allow when device is Non Comprehensive
+      if (formData.charges && formData.charges !== '') {
+        const devType = getDeviceType(formData.deviceId);
+        const num = Number(formData.charges);
+        if (devType.toLowerCase().trim() !== 'non comprehensive') {
+          toast.error('Charges can only be entered for Non Comprehensive devices');
+          return;
+        }
+        if (Number.isNaN(num) || num < 0) {
+          toast.error('Charges must be a non-negative number');
+          return;
+        }
+      }
       const response = await fetch(
         `http://localhost:8000/maintenance`,
         {
@@ -467,6 +483,15 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const getDeviceBrandSerial = (deviceId: string) => {
     const device = devices.find((d: { id: string; }) => d.id === deviceId) as any;
     return device ? ((device as any).brand_serial_number || '-') : '-';
+  };
+
+  const getDeviceType = (deviceId: string) => {
+    const device = devices.find((d: any) => d.id === deviceId) as any;
+    if (!device) return 'Comprehensive';
+    // support multiple property names in case devices come with different keys
+    const raw = device.device_type || device.deviceType || device.type || '';
+    if (!raw || String(raw).trim() === '') return 'Comprehensive';
+    return String(raw);
   };
 
   const getTechnicianName = (techId: string) => {
@@ -710,7 +735,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
 
   // ========== REPORT HEADER ==========
   doc.setFontSize(15);
-  doc.setFont('Arial', 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.setTextColor(44, 62, 80); // Dark gray
   // Place the report title below the separator so it never overlaps
   const reportTitleY = sepY + 10;
@@ -769,15 +794,47 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       doc.setFontSize(8.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(60, 60, 60);
-      doc.text(`Total Records: ${recordsToPrint.length}`, 18, summaryY + 12);
-      doc.text(`Devices: ${uniqueDevices}`, 60, summaryY + 12);
-      doc.text(`Techs: ${uniqueTechnicians}`, 90, summaryY + 12);
-      doc.text(`Next Maintenance: ${nextMaintDate || '-'}`, 120, summaryY + 12);
+      // Draw Total Records with the value bolded
+      const totalLabel = `Total Records: `;
+      doc.text(totalLabel, 18, summaryY + 12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(String(recordsToPrint.length), 18 + doc.getTextWidth(totalLabel), summaryY + 12);
+      // Draw Next Maintenance with the value bolded
+      doc.setFont('helvetica', 'normal');
+      const nextLabelX = 120;
+      const nextLabel = `Next Maintenance: `;
+      doc.text(nextLabel, nextLabelX, summaryY + 12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(nextMaintDate || '-', nextLabelX + doc.getTextWidth(nextLabel), summaryY + 12);
       const pdfTotalCharges = recordsToPrint.reduce((s: number, r: any) => s + (Number(r.charges) || 0), 0);
-      doc.text(`Total Charges: ₹${pdfTotalCharges.toFixed(2)}`, 170, summaryY + 12);
+      // Draw total charges in bold on the right side of the summary box for emphasis
+      // Use `Rs` instead of the rupee glyph to avoid missing-glyph substitution in builtin PDF fonts.
+      doc.setFont('helvetica', 'bold');
+      // Start with a comfortable font size and reduce if the text would overflow the summary box
+      let totalFontSize = 10;
+      let totalText = `Total Charges: Rs ${pdfTotalCharges.toFixed(2)}`;
+      // Maximum width we allow for the total text inside the summary box (leave some padding)
+      const summaryRightMargin = 15;
+      const leftPaddingForSummary = 18; // space used by left-side labels
+      const maxTotalWidth = pageWidth - summaryRightMargin - leftPaddingForSummary - 12;
+      doc.setFontSize(totalFontSize);
+      let tw = doc.getTextWidth(totalText);
+      while (tw > maxTotalWidth && totalFontSize > 7) {
+        totalFontSize -= 1;
+        doc.setFontSize(totalFontSize);
+        tw = doc.getTextWidth(totalText);
+      }
+      // Draw the total right-aligned within the summary box with a small right padding
+      const totalX = pageWidth - summaryRightMargin - 3;
+      const totalY = summaryY + 12;
+      doc.text(totalText, totalX, totalY, { align: 'right' });
+      // restore normal font and size
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
 
       // ========== MAINTENANCE RECORDS TABLE ==========
       // Prepare table data with serial numbers
+      // Move Charges column after Service Note for better readability in PDF
       const tableData = recordsToPrint.map((record: { created_at: string | number | Date; device_id: string; technician_id: string; status: string; description: any; charges?: number }, index: number) => [
         String(index + 1),
         new Date(record.created_at).toLocaleDateString('en-IN', {
@@ -787,24 +844,26 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         }),
         getDeviceSerial(record.device_id),
         getDeviceBrandSerial(record.device_id),
-        (record.charges != null ? `₹${Number(record.charges).toFixed(2)}` : '-'),
         getTechnicianName(record.technician_id),
         record.description || 'Routine maintenance',
+        // Use 'Rs' prefix to avoid missing rupee glyph in the embedded PDF font and show decimals clearly
+        (record.charges != null ? `Rs ${Number(record.charges).toFixed(2)}` : '-'),
         record.status || 'Yet to Start'
       ]);
       // Compute column widths dynamically to use full content width (page minus margins)
       const leftMargin = 15;
       const rightMargin = 15;
       const contentWidth = pageWidth - leftMargin - rightMargin;
-      // Base widths (mm) for fixed columns (added charges column at index 4)
+      // Base widths (mm) for fixed columns (charges column moved after notes).
+      // Increase Serial No column and reduce row height (smaller font + padding) to fit amounts.
       const col0 = 14;   // # (wider so multi-digit row numbers don't stack)
-      const col1 = 22;  // Service Date
-      const col2 = 36;  // Serial No (wider to avoid wrapping)
-      const col3 = 30;  // Brand Serial No
-      const col4 = 20;  // Charges
-      const col7 = 24;  // Status (last column)
-      // Technician made broader to reduce wrapping; Service Note a bit smaller
-      const col5 = 28;  // Technician (increased)
+      const col1 = 20;  // Service Date
+      const col2 = 48;  // Serial No (increased width per request)
+      const col4 = 26;  // Charges (wide enough for numbers)
+      const col7 = 22;  // Status (last column)
+      // Technician slightly smaller; Service Note (col6) takes remaining space
+      const col3 = 32;  // Brand Serial No (increased slightly)
+      const col5 = 28;  // Technician (increased slightly)
       // Service Note takes remaining space but at least 18mm
       const remaining = contentWidth - (col0 + col1 + col2 + col3 + col4 + col5 + col7);
       const col6 = Math.max(18, remaining);
@@ -812,7 +871,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       // Add table using autoTable
       autoTable(doc, {
         startY: summaryY + 18,
-          head: [['#', 'Service Date', 'Serial No', 'Brand Serial No', 'Charges', 'Technician', 'Service Note', 'Status']],
+          head: [['#', 'Service Date', 'Serial No', 'Brand Serial No', 'Technician', 'Service Note', 'Charges', 'Status']],
           body: tableData,
         theme: 'striped',
         headStyles: {
@@ -824,25 +883,28 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           cellPadding: 3
         },
         bodyStyles: {
-          fontSize: 8,
+          // Slightly smaller font and tighter padding to avoid page overflow
+          fontSize: 6.5,
           textColor: [40, 40, 40],
-          cellPadding: 3,
+          cellPadding: 2,
           valign: 'middle'
         },
         alternateRowStyles: {
           fillColor: [249, 249, 249]
         },
+        // Column indexes changed because Charges moved after Service Note
         columnStyles: {
-          0: { cellWidth: col0, halign: 'center', fontStyle: 'bold' },
-          1: { cellWidth: col1, halign: 'center' },
-          2: { cellWidth: col2, halign: 'center' },
-          3: { cellWidth: col3, halign: 'center' },
-          4: { cellWidth: col4, halign: 'right' },
-          5: { cellWidth: col5, halign: 'left' },
-          6: { cellWidth: col6, halign: 'left' },
-          7: { cellWidth: col7, halign: 'center', fontStyle: 'bold' }
+          0: { cellWidth: col0, halign: 'center', fontStyle: 'bold' }, // #
+          1: { cellWidth: col1, halign: 'center' }, // Service Date
+          2: { cellWidth: col2, halign: 'center', fontStyle: 'bold' }, // Serial No (bold)
+          3: { cellWidth: col3, halign: 'center', fontStyle: 'bold' }, // Brand Serial No (bold)
+          4: { cellWidth: col5, halign: 'left' },   // Technician (reuse col5 size)
+          5: { cellWidth: col6, halign: 'left' },   // Service Note (remaining)
+          6: { cellWidth: col4, halign: 'right', fontStyle: 'bold' },  // Charges (wider, right-aligned, bold)
+          7: { cellWidth: col7, halign: 'center', fontStyle: 'bold' } // Status
         },
-        margin: { left: leftMargin, right: rightMargin },
+        // Reserve bottom margin so table won't draw into the footer/certification area
+        margin: { left: leftMargin, right: rightMargin, bottom: 36 },
         styles: {
           overflow: 'linebreak',
           cellPadding: 3,
@@ -851,8 +913,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           lineWidth: 0.1
         },
         didDrawCell: (data) => {
-          // Color code the status column (last column index 6)
-          if (data.column.index === 6 && data.section === 'body') {
+          // Color code the status column (last column index 7)
+          if (data.column.index === 7 && data.section === 'body') {
             const status = data.cell.raw as string;
             let fillColor: [number, number, number] = [249, 249, 249]; // default gray
             let textColor: [number, number, number] = [100, 100, 100];
@@ -878,7 +940,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
             
             // Apply the text color and redraw text
             doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-            doc.setFontSize(8);
+            doc.setFontSize(7);
             doc.setFont('helvetica', 'bold');
             doc.text(status, data.cell.x + data.cell.width / 2, data.cell.y + data.cell.height / 2, {
               align: 'center',
@@ -1002,7 +1064,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       // Save the PDF
       const fileName = `NPA_Maintenance_Report_${orgName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
-      toast.success('Professional PDF report generated successfully!');
+      toast.success('PDF report generated successfully!');
     } catch (error) {
       console.error('Error generating PDF:', error);
       toast.error('Failed to generate PDF. Please try again.');
@@ -1091,6 +1153,66 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     } catch (error) {
       console.error('Error updating notes:', error);
       toast.error('Failed to update notes');
+    }
+  };
+
+  const startEditCharges = (record: any) => {
+    setEditingChargesId(record.id);
+    setEditingChargesValue(record.charges != null ? String(record.charges) : '');
+  };
+
+  const cancelEditCharges = () => {
+    setEditingChargesId(null);
+    setEditingChargesValue('');
+  };
+
+  const saveEditCharges = async (recordId: string) => {
+    const val = editingChargesValue;
+    const num = Number(val);
+    if (Number.isNaN(num) || num < 0) {
+      toast.error('Charges must be a non-negative number');
+      return;
+    }
+
+    try {
+      const resp = await fetch(`http://localhost:8000/maintenance/${recordId}/charges`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ charges: num }),
+      });
+      // Try to parse JSON response, but fall back to text for non-JSON or empty bodies
+      let data: any = null;
+      try {
+        data = await resp.json();
+      } catch (e) {
+        try {
+          const txt = await resp.text();
+          data = { error: txt };
+        } catch (ee) {
+          data = { error: `HTTP ${resp.status}` };
+        }
+      }
+
+      if (!resp.ok) {
+        console.error('Failed to save charges response:', resp.status, data);
+        toast.error(data?.error || `Failed to save charges (status ${resp.status})`);
+        return;
+      }
+      toast.success('Charges updated');
+      setEditingChargesId(null);
+      setEditingChargesValue('');
+      // refresh both maintenance lists and report if open
+      fetchMaintenance();
+      if (reportDialogOpen) {
+        // regenerate report for currently selected org
+        if (selectedOrgId) await handleGenerateReport();
+      }
+    } catch (e) {
+      console.error('Error saving charges (network or unexpected):', e);
+      toast.error('Failed to save charges. See console for details');
     }
   };
 
@@ -1595,9 +1717,33 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                                 </div>
                               )}
                             </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {(record as any).charges ? `₹${Number((record as any).charges).toFixed(2)}` : '-'}
-                              </TableCell>
+                            <TableCell className="text-right">
+                              {editingChargesId === record.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={editingChargesValue}
+                                    onChange={(e) => setEditingChargesValue(e.target.value)}
+                                    aria-label="Edit charges"
+                                    className="w-11 rounded-md border px-2 py-1 text-sm"
+                                  />
+                                  <div className="flex gap-1">
+                                    <Button size="sm" onClick={() => saveEditCharges(record.id)}>Save</Button>
+                                    <Button size="sm" variant="outline" onClick={cancelEditCharges}>Cancel</Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-2">
+                                  <div className="font-medium">{(record as any).charges != null ? `₹${Number((record as any).charges).toFixed(2)}` : '-'}</div>
+                                  {/* Only show edit for Non Comprehensive devices */}
+                                  {getDeviceType(record.device_id).toLowerCase().trim() === 'non comprehensive' && (
+                                    <Button size="sm" variant="ghost" onClick={() => startEditCharges(record)}>Edit</Button>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
                               <TableCell>
                               <Select
                                 value={record.status}
@@ -1697,7 +1843,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <p className="text-sm text-gray-600">Total Maintenance Records: <span className="font-semibold">{orgReport.length}</span></p>
                       <p className="text-sm text-gray-600 mt-2">Next Maintenance Date: <span className="font-bold">{getNextMaintenanceDate(orgReport) || '-'}</span></p>
-                      <p className="text-sm text-gray-600 mt-2">Total Charges: <span className="font-semibold">{`₹${totalSelectedCharges.toFixed(2)}`}</span></p>
+                      <p className="text-sm text-gray-400 ">Total Charges: <span className="font-semibold">{`₹${totalSelectedCharges.toFixed(2)}`}</span></p>
                     </div>
 
                     <p className="text-sm text-gray-600">Showing <span className="font-semibold">{orgReport.length === 0 ? 0 : (Math.min((reportPage) * reportPageSize, orgReport.length) - (reportPageSize - 1) > orgReport.length ? orgReport.length : (reportPage - 1) * reportPageSize + 1)}</span> to <span className="font-semibold">{Math.min(reportPage * reportPageSize, orgReport.length)}</span> of <span className="font-semibold">{orgReport.length}</span> records. <span className="ml-2">Page <span className="font-semibold">{reportPage}</span> of <span className="font-semibold">{reportTotalPages}</span></span></p>
@@ -1727,7 +1873,32 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                               <TableCell>{new Date(record.created_at).toLocaleDateString('en-IN')}</TableCell>
                               <TableCell>{getDeviceSerial(record.device_id)}</TableCell>
                               <TableCell>{getDeviceBrandSerial(record.device_id)}</TableCell>
-                              <TableCell className="text-right">{(record as any).charges ? `₹${Number((record as any).charges).toFixed(2)}` : '-'}</TableCell>
+                              <TableCell className="text-right">
+                                {editingChargesId === record.id ? (
+                                  <div className="flex items-center gap-2 justify-end">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={editingChargesValue}
+                                      onChange={(e) => setEditingChargesValue(e.target.value)}
+                                      aria-label="Edit charges"
+                                      className="w-11 rounded-md border px-2 py-1 text-sm"
+                                    />
+                                    <div className="flex gap-1">
+                                      <Button size="sm" onClick={() => saveEditCharges(record.id)}>Save</Button>
+                                      <Button size="sm" variant="outline" onClick={cancelEditCharges}>Cancel</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-end gap-2">
+                                    <div className="font-medium">{(record as any).charges != null ? `₹${Number((record as any).charges).toFixed(2)}` : '-'}</div>
+                                    {getDeviceType(record.device_id).toLowerCase().trim() === 'non comprehensive' && (
+                                      <Button size="sm" variant="ghost" onClick={() => startEditCharges(record)}>Edit</Button>
+                                    )}
+                                  </div>
+                                )}
+                              </TableCell>
                               <TableCell>{getDeviceName(record.device_id)}</TableCell>
                               <TableCell>{getTechnicianName(record.technician_id)}</TableCell>
                               <TableCell className="max-w-[360px] whitespace-pre-wrap break-words">{record.description || '-'}</TableCell>
