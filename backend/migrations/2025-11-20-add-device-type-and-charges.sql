@@ -12,7 +12,8 @@ RETURNS TRIGGER AS $$
 BEGIN
   IF (NEW.charges IS NOT NULL) THEN
     -- Check the referenced device has device_type = 'Non Comprehensive'
-    PERFORM 1 FROM devices WHERE id = NEW.device_id AND device_type = 'Non Comprehensive';
+    -- Use trimmed, lower-cased comparison to avoid failures from extra spaces or case differences
+    PERFORM 1 FROM devices WHERE id = NEW.device_id AND lower(trim(device_type)) = 'non comprehensive';
     IF NOT FOUND THEN
       RAISE EXCEPTION 'Charges can only be set for non-comprehensive devices';
     END IF;
