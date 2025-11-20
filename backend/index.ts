@@ -355,7 +355,7 @@ app.get("/devices", requireAuth, async (c) => {
 // Create device
 app.post("/make-server-60660975/devices", requireAuth, async (c) => {
   try {
-    const { deviceName, organizationId, model, brandSerialNumber } = await c.req.json();
+    const { deviceName, organizationId, model, brandSerialNumber, deviceType } = await c.req.json();
 
     if (!deviceName || !organizationId) {
       return c.json({ error: 'Device name and organization are required' }, 400);
@@ -440,6 +440,7 @@ app.post("/make-server-60660975/devices", requireAuth, async (c) => {
       brand_serial_number: brandSerialNumber || '',
       model: model || '',
       status: 'active',
+      device_type: deviceType || 'Comprehensive',
     };
 
     const { data, error } = await supabase
@@ -469,7 +470,7 @@ app.post("/make-server-60660975/devices", requireAuth, async (c) => {
 app.put("/make-server-60660975/devices/:id", requireAuth, async (c) => {
   try {
     const deviceId = c.req.param('id');
-    const { deviceName, organizationId, serialNumber, model, status, is_archived, brandSerialNumber } = await c.req.json();
+    const { deviceName, organizationId, serialNumber, model, status, is_archived, brandSerialNumber, deviceType } = await c.req.json();
     
     if (!deviceName || !organizationId || !serialNumber) {
       return c.json({ error: 'Device name, organization, and serial number are required' }, 400);
@@ -525,6 +526,7 @@ app.put("/make-server-60660975/devices/:id", requireAuth, async (c) => {
       // keep serial_number untouched (immutable)
       brand_serial_number: brandSerialNumber !== undefined ? brandSerialNumber : existingDevice.brand_serial_number,
       model: model || '',
+      device_type: deviceType !== undefined ? deviceType : existingDevice.device_type,
       status: status || 'active',
       is_archived: is_archived !== undefined ? is_archived : false,
       updated_at: new Date().toISOString(),
@@ -873,7 +875,7 @@ app.get("/make-server-60660975/maintenance/device/:deviceId", requireAuth, async
 app.post("/maintenance", requireAuth, async (c) => {
   try {
     const supabase = getSupabaseAdmin();
-    const { deviceId, technicianId, organizationId, notes, date } = await c.req.json();
+    const { deviceId, technicianId, organizationId, notes, date, charges } = await c.req.json();
     
     if (!deviceId || !technicianId) {
       return c.json({ error: 'Device and technician are required' }, 400);
@@ -910,6 +912,7 @@ app.post("/maintenance", requireAuth, async (c) => {
       organization_id: finalOrgId,
       description: notes || '',
       status: 'Yet to Start',
+      charges: (charges !== undefined && charges !== null) ? charges : null,
     };
 
     const { data: maintenance, error } = await supabase
