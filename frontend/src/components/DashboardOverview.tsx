@@ -22,6 +22,7 @@ interface Stats {
   recentMaintenance: number;
   // analytics
   maintenanceByDay: number[]; // last 30 days, oldest -> newest
+  maintenanceByDayStatus: Record<string, number>[]; // per-day status breakdown
   deviceStatus: { active: number; archived: number };
   orgStatus: { active: number; archived: number };
   maintenanceStatusCounts: Record<string, number>;
@@ -93,46 +94,107 @@ const StackedBarChart: React.FC<{ active: number; archived: number; width?: numb
   );
 };
 
-// Pie chart for maintenance status breakdown
-const PieChart: React.FC<{ counts: Record<string, number>; size?: number }> = ({ counts, size = 100 }) => {
-  const entries = Object.entries(counts).filter(([, v]) => v > 0);
-  if (entries.length === 0) return <div className="text-sm text-gray-500">No data</div>;
-  const total = entries.reduce((s, [, v]) => s + v, 0);
-  const colors = ['#10b981', '#3b82f6', '#f97316', '#ef4444', '#8b5cf6', '#06b6d4'];
-  let angle = 0;
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = size / 2 - 2;
+// Line chart for maintenance over the last N days
+const LineChart: React.FC<{ data: number[]; dataStatus?: Record<string, number>[]; width?: number; height?: number; color?: string; onHover?: (index: number | null) => void }> = ({ data, dataStatus = [], width = 320, height = 160, color = '#10b981', onHover }) => {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [hoverIdx, setHoverIdx] = React.useState<number | null>(null);
+  const [hoverPos, setHoverPos] = React.useState<{ x: number; y: number } | null>(null);
 
-  const paths = entries.map(([k, v], i) => {
-    const portion = v / total;
-    const start = angle;
-    const end = angle + portion * Math.PI * 2;
-    const x1 = cx + r * Math.cos(start - Math.PI / 2);
-    const y1 = cy + r * Math.sin(start - Math.PI / 2);
-    const x2 = cx + r * Math.cos(end - Math.PI / 2);
-    const y2 = cy + r * Math.sin(end - Math.PI / 2);
-    const large = end - start > Math.PI ? 1 : 0;
-    const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
-    angle = end;
-    return { d, color: colors[i % colors.length], label: k, value: v };
+  if (!data || data.length === 0) return <div className="text-sm text-gray-500">No data</div>;
+  const padding = 12;
+  const w = width;
+  const h = height;
+  const plotW = Math.max(10, w - padding * 2);
+  const plotH = Math.max(10, h - padding * 2);
+  const max = Math.max(...data, 1);
+  const points = data.map((v, i) => {
+    const x = padding + (i / Math.max(1, data.length - 1)) * plotW;
+    const y = padding + (1 - v / max) * plotH;
+    return { x, y, v };
   });
 
+  // Build path string
+  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+  // Area path (closed)
+  const areaD = `${d} L ${padding + plotW} ${padding + plotH} L ${padding} ${padding + plotH} Z`;
+
+  const onMove = (e: React.MouseEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    // find nearest point
+    let nearest = 0;
+    let nearestDist = Infinity;
+    points.forEach((p, i) => {
+      const dx = Math.abs(p.x - x);
+      if (dx < nearestDist) {
+        nearestDist = dx;
+        nearest = i;
+      }
+    });
+    setHoverIdx(nearest);
+    setHoverPos({ x: points[nearest].x, y: points[nearest].y });
+    if (onHover) onHover(nearest);
+  };
+
+  const onLeave = () => {
+    setHoverIdx(null);
+    setHoverPos(null);
+    if (onHover) onHover(null);
+  };
+
+  // statuses order for tooltip
+  const statusOrder = ['Yet to Start', 'In Progress', 'Completed', 'Cancelled'];
+
   return (
-    <div className="flex flex-col items-center">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {paths.map((p, i) => (
-          <path key={i} d={p.d} fill={p.color} stroke="#fff" strokeWidth={1} />
+    <div ref={containerRef} className="relative" style={{ width: w }} onMouseMove={onMove} onMouseLeave={onLeave}>
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+        <defs>
+          <linearGradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.14" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={areaD} fill="url(#areaGrad)" stroke="none" />
+        <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={3.5} fill="#fff" stroke={color} strokeWidth={1.5} />
         ))}
+        {hoverIdx !== null && hoverPos && (
+          <g pointerEvents="none">
+            <line x1={hoverPos.x} x2={hoverPos.x} y1={padding} y2={h - padding} stroke="#0f172a" strokeWidth={0.6} opacity={0.08} />
+          </g>
+        )}
       </svg>
-      <div className="mt-2 text-xs text-center">
-        {entries.slice(0, 3).map(([k, v], i) => (
-          <div key={k} className="flex items-center gap-2 justify-center">
-            <span className="w-2 h-2 inline-block" style={{ background: colors[i % colors.length] }} />
-            <span className="text-xs text-gray-600">{k}: <span className="font-semibold text-gray-800">{v}</span></span>
+
+      {hoverIdx !== null && hoverPos && (
+        <div className="absolute z-20" style={{ left: Math.min(Math.max(0, hoverPos.x + 8), w - 180), top: hoverPos.y - 8 }}>
+          <div className="bg-white shadow-lg border rounded-md text-sm p-2 w-44">
+            <div className="font-semibold">Day {hoverIdx + 1}</div>
+            <div className="mt-1">
+              {statusOrder.map((s) => {
+                const cnt = (dataStatus[hoverIdx] && dataStatus[hoverIdx][s]) || 0;
+                const colorMap: Record<string, string> = {
+                  'Yet to Start': '#94a3b8',
+                  'In Progress': '#f59e0b',
+                  'Completed': '#10b981',
+                  'Cancelled': '#ef4444',
+                };
+                return (
+                  <div key={s} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-sm inline-block" style={{ background: colorMap[s] }} />
+                      <span className="text-xs text-gray-700">{s}</span>
+                    </div>
+                    <div className="text-xs font-semibold text-gray-800">{cnt}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -177,11 +239,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
     totalMaintenance: 0,
     recentMaintenance: 0,
     maintenanceByDay: [],
+    maintenanceByDayStatus: Array.from({ length: 30 }, () => ({})),
     deviceStatus: { active: 0, archived: 0 },
     orgStatus: { active: 0, archived: 0 },
     maintenanceStatusCounts: {},
   });
   const [loading, setLoading] = useState(true);
+  const [hoveredDayIndex, setHoveredDayIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -242,6 +306,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
 
       // Build maintenanceByDay array (30 days: oldest -> newest)
       const maintenanceByDay: number[] = new Array(30).fill(0);
+      const maintenanceByDayStatus: Record<string, number>[] = Array.from({ length: 30 }, () => ({}));
       const maintenanceStatusCounts: Record<string, number> = {};
       for (const m of maintenance) {
         const d = new Date(m.created_at);
@@ -250,10 +315,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
         if (diffDays >= 0 && diffDays < 30) {
           maintenanceByDay[diffDays] = (maintenanceByDay[diffDays] || 0) + 1;
+          const status = (m.status || 'Unknown').toString();
+          maintenanceByDayStatus[diffDays][status] = (maintenanceByDayStatus[diffDays][status] || 0) + 1;
         }
         // status counts (aggregate overall maintenance)
-        const status = (m.status || 'Unknown').toString();
-        maintenanceStatusCounts[status] = (maintenanceStatusCounts[status] || 0) + 1;
+        const statusAll = (m.status || 'Unknown').toString();
+        maintenanceStatusCounts[statusAll] = (maintenanceStatusCounts[statusAll] || 0) + 1;
       }
 
       setStats({
@@ -267,6 +334,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
         totalMaintenance: maintenance.length,
         recentMaintenance: recentMaintenanceCount,
         maintenanceByDay,
+        maintenanceByDayStatus,
         deviceStatus: { active: activeDevicesCount, archived: archivedDevicesCount },
         orgStatus: { active: activeOrgs, archived: archivedOrgs },
         maintenanceStatusCounts,
@@ -394,7 +462,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
             <CardContent className="space-y-2 p-3">
             <div className="flex flex-col md:flex-row items-right gap-4">
               <div className="flex-1 w-full md:w-auto">
-                <PieChart counts={stats.maintenanceStatusCounts} size={160} />
+                <LineChart data={stats.maintenanceByDay} dataStatus={stats.maintenanceByDayStatus} width={320} height={160} color="#10b981" onHover={(i) => setHoveredDayIndex(i)} />
               </div>
               <div className="w-full md:w-36 text-center md:text-right relative z-10">
                 <div className="text-lg font-semibold text-green-600">{stats.recentMaintenance}</div>
@@ -412,11 +480,31 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
               <div className="p-2 rounded-lg bg-gray-100">
                 <Archive className="w-5 h-5 text-gray-600" />
               </div>
-              <span>Active vs Archived</span>
+              <span>Day Breakdown</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-3 flex items-center justify-center">
-            <CarouselStatus stats={stats} />
+            <div className="flex flex-col items-center gap-3">
+              <div className="text-sm text-gray-600">Selected Day</div>
+              <div className="flex flex-col gap-2 items-stretch">
+                {['Yet to Start', 'In Progress', 'Completed', 'Cancelled'].map((s) => {
+                  const displayIdx = (hoveredDayIndex !== null && hoveredDayIndex !== undefined) ? hoveredDayIndex : (stats.maintenanceByDay.length - 1);
+                  const cnt = (stats.maintenanceByDayStatus && stats.maintenanceByDayStatus[displayIdx] && stats.maintenanceByDayStatus[displayIdx][s]) || 0;
+                  const styleMap: Record<string, string> = {
+                    'Yet to Start': 'bg-gray-100 text-gray-800 border border-gray-300',
+                    'In Progress': 'bg-yellow-100 text-yellow-800 border border-yellow-300',
+                    'Completed': 'bg-green-100 text-green-800 border border-green-300',
+                    'Cancelled': 'bg-red-100 text-red-800 border border-red-300',
+                  };
+                  return (
+                    <div key={s} className="flex items-center justify-between px-3 py-2 rounded-md shadow-sm" >
+                      <div className={`px-3 py-1 rounded-md ${styleMap[s]} font-semibold`}>{s}</div>
+                      <div className="ml-3 text-lg font-bold text-gray-800">{cnt}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
