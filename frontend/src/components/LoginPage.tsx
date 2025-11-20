@@ -160,11 +160,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     Remember me
                   </label>
                 </div>
-                <div className="text-sm">
+                {/* <div className="text-sm">
                   <button type="button" className="text-amber-600 hover:text-amber-700">
                     Forgot password?
                   </button>
-                </div>
+                </div> */}
               </div>
             )}
 

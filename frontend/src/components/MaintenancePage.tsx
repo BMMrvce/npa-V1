@@ -67,6 +67,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const [bulkOrgId, setBulkOrgId] = useState('');
   const [formData, setFormData] = useState({
     deviceId: '',
+    organizationId: '',
     technicianId: '',
     notes: '',
     date: new Date().toISOString().split('T')[0],
@@ -79,6 +80,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const [reportStartDate, setReportStartDate] = useState('');
   const [reportEndDate, setReportEndDate] = useState('');
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [deviceSearch, setDeviceSearch] = useState('');
+  const [bulkDeviceSearch, setBulkDeviceSearch] = useState('');
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editingNotesText, setEditingNotesText] = useState<string>('');
   // Pagination for report dialog (page starts at 1)
@@ -97,6 +100,11 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 0);
     setCanScrollRight(el.scrollWidth > el.clientWidth && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+
+  // Helper: returns true if device has an active maintenance (Yet to Start or In Progress)
+  const isDeviceUnderActiveMaintenance = (deviceId: string) => {
+    return maintenance.some(m => m.device_id === deviceId && m.status && !['Completed', 'Cancelled'].includes(m.status));
   };
 
   const updateVerticalScrollState = () => {
@@ -263,6 +271,13 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       return;
     }
 
+    // Prevent scheduling if this device already has an active maintenance
+    const activeForDevice = maintenance.find(m => m.device_id === selectedDevice.id && m.status && !['Completed', 'Cancelled'].includes(m.status));
+    if (activeForDevice) {
+      toast.error(`Cannot schedule: device "${selectedDevice.name}" already has an active maintenance (${activeForDevice.status}). Close it first.`);
+      return;
+    }
+
     try {
       const response = await fetch(
         `http://localhost:8000/maintenance`,
@@ -274,7 +289,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           },
           body: JSON.stringify({
             ...formData,
-            organizationId: selectedDevice.organization_id,
+            organizationId: formData.organizationId || selectedDevice.organization_id,
           }),
         }
       );
@@ -291,6 +306,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       setDialogOpen(false);
       setFormData({
         deviceId: '',
+        organizationId: '',
         technicianId: '',
         notes: '',
         date: new Date().toISOString().split('T')[0],
@@ -317,7 +333,21 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       return;
     }
 
+    // Split selected devices into allowed and blocked by active maintenance
+    const blockedDevices = selectedDevices.filter(did => isDeviceUnderActiveMaintenance(did));
+    const allowedDevices = selectedDevices.filter(did => !isDeviceUnderActiveMaintenance(did));
+
+    if (blockedDevices.length > 0 && allowedDevices.length === 0) {
+      const names = blockedDevices.map(did => getDeviceName(did)).join(', ');
+      toast.error(`Cannot schedule: these devices already have active maintenance and must be closed first: ${names}`);
+      return;
+    }
+
     try {
+      if (blockedDevices.length > 0) {
+        const names = blockedDevices.map(did => getDeviceName(did)).join(', ');
+        toast.warning(`Skipping devices with active maintenance: ${names}`);
+      }
       const response = await fetch(
         `http://localhost:8000/make-server-60660975/maintenance/bulk`,
         {
@@ -328,7 +358,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           },
           body: JSON.stringify({
             organizationId: bulkOrgId,
-            deviceIds: selectedDevices,
+            deviceIds: allowedDevices,
             technicianId: bulkFormData.technicianId,
             notes: bulkFormData.notes,
             date: bulkFormData.date,
@@ -450,6 +480,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   };
 
   const handleDeviceToggle = (deviceId: string) => {
+    // Prevent toggling devices that are under active maintenance
+    if (isDeviceUnderActiveMaintenance(deviceId)) return;
     setSelectedDevices((prev: string[]) =>
       prev.includes(deviceId)
         ? prev.filter((id: string) => id !== deviceId)
@@ -459,10 +491,12 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
 
   const handleSelectAllDevices = (orgId: string) => {
     const orgDevices = getOrgDevices(orgId);
-    if (selectedDevices.length === orgDevices.length) {
+    // Only consider devices that are not under active maintenance
+    const allowedDevices = orgDevices.filter(d => !isDeviceUnderActiveMaintenance(d.id));
+    if (selectedDevices.length === allowedDevices.length) {
       setSelectedDevices([]);
     } else {
-      setSelectedDevices(orgDevices.map((d: { id: any; }) => d.id));
+      setSelectedDevices(allowedDevices.map((d: { id: any; }) => d.id));
     }
   };
 
@@ -1077,7 +1111,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                 Bulk Schedule
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Schedule Organization Maintenance</DialogTitle>
                 <DialogDescription>Schedule maintenance for multiple devices at once</DialogDescription>
@@ -1116,28 +1150,51 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                         size="sm"
                         onClick={() => handleSelectAllDevices(bulkOrgId)}
                       >
-                        {selectedDevices.length === getOrgDevices(bulkOrgId).length ? 'Deselect All' : 'Select All'}
+                        {selectedDevices.length === getOrgDevices(bulkOrgId).filter(d => !isDeviceUnderActiveMaintenance(d.id)).length ? 'Deselect All' : 'Select All'}
                       </Button>
                     </div>
                     <div className="border rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
-                      {getOrgDevices(bulkOrgId).length === 0 ? (
+                      <div>
+                        <input
+                          type="text"
+                          value={bulkDeviceSearch}
+                          onChange={(e) => setBulkDeviceSearch(e.target.value)}
+                          placeholder="Search devices..."
+                          className="w-full rounded-md border border-input px-3 py-2 text-sm mb-2"
+                        />
+                      </div>
+                      {getOrgDevices(bulkOrgId).filter(d => {
+                        const q = bulkDeviceSearch.toLowerCase();
+                        const nameMatch = (d.name || '').toLowerCase().includes(q);
+                        const brandMatch = ((d as any).brand_serial_number || '').toLowerCase().includes(q);
+                        return q === '' ? true : nameMatch || brandMatch;
+                      }).length === 0 ? (
                         <p className="text-sm text-gray-500">No devices found for this organization</p>
                       ) : (
-                        getOrgDevices(bulkOrgId).map((device: { id: string; name: any; }) => (
-                          <div key={device.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={device.id}
-                              checked={selectedDevices.includes(device.id)}
-                              onCheckedChange={() => handleDeviceToggle(device.id)}
-                            />
-                            <label
-                              htmlFor={device.id}
-                              className="text-sm cursor-pointer flex-1"
-                            >
-                              {device.name}
-                            </label>
-                          </div>
-                        ))
+                        getOrgDevices(bulkOrgId)
+                          .filter(d => {
+                            const q = bulkDeviceSearch.toLowerCase();
+                            const nameMatch = (d.name || '').toLowerCase().includes(q);
+                            const brandMatch = ((d as any).brand_serial_number || '').toLowerCase().includes(q);
+                            return q === '' ? true : nameMatch || brandMatch;
+                          })
+                          .map((device: { id: string; name: any; }) => (
+                            <div key={device.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={device.id}
+                                checked={selectedDevices.includes(device.id)}
+                                onCheckedChange={() => !isDeviceUnderActiveMaintenance(device.id) && handleDeviceToggle(device.id)}
+                                disabled={isDeviceUnderActiveMaintenance(device.id)}
+                              />
+                              <label
+                                htmlFor={device.id}
+                                className={isDeviceUnderActiveMaintenance(device.id) ? 'text-sm text-gray-400 cursor-not-allowed flex-1' : 'text-sm cursor-pointer flex-1'}
+                              >
+                                {device.name}
+                                {isDeviceUnderActiveMaintenance(device.id) && <span className="ml-2 text-xs text-yellow-700 font-medium">(Active)</span>}
+                              </label>
+                            </div>
+                          ))
                       )}
                     </div>
                   </div>
@@ -1219,6 +1276,27 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
+                <div className="space-y-2">
+                  <Label htmlFor="orgSelectSingle">Organization *</Label>
+                  <Select
+                    value={formData.organizationId}
+                    onValueChange={(value: string) => {
+                      setFormData({ ...formData, organizationId: value, deviceId: '' });
+                      setDeviceSearch('');
+                    }}
+                  >
+                    <SelectTrigger id="orgSelectSingle">
+                      <SelectValue placeholder="Select organization" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeOrganizations.map((org: { id: any; name: any; }) => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                   <Label htmlFor="device">Device *</Label>
                   <Select
                     value={formData.deviceId}
@@ -1229,11 +1307,36 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                       <SelectValue placeholder="Select device" />
                     </SelectTrigger>
                     <SelectContent>
-                      {devices.map((device: { id: any; name: any; }) => (
-                        <SelectItem key={device.id} value={device.id}>
-                          {device.name}
-                        </SelectItem>
-                      ))}
+                      <div className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={deviceSearch}
+                          onChange={(e) => setDeviceSearch(e.target.value)}
+                          placeholder="Search devices... (name or brand serial)"
+                          className="w-full rounded-md border border-input px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        {devices
+                          .filter((d: any) => {
+                            // If organization selected in the single form, limit devices
+                            if (formData.organizationId && d.organization_id !== formData.organizationId) return false;
+                            const q = deviceSearch.toLowerCase();
+                            const nameMatch = (d.name || '').toLowerCase().includes(q);
+                            const brandMatch = ((d as any).brand_serial_number || '').toLowerCase().includes(q);
+                            return q === '' ? true : nameMatch || brandMatch;
+                          })
+                          .map((device: { id: any; name: any; }) => (
+                            <SelectItem
+                              key={device.id}
+                              value={device.id}
+                              disabled={isDeviceUnderActiveMaintenance(device.id)}
+                              className={isDeviceUnderActiveMaintenance(device.id) ? 'text-gray-400' : ''}
+                            >
+                              {device.name}{isDeviceUnderActiveMaintenance(device.id) ? ' (Active)' : ''}
+                            </SelectItem>
+                          ))}
+                      </div>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1288,7 +1391,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={activeTechnicians.length === 0}
+                  disabled={activeTechnicians.length === 0 || isDeviceUnderActiveMaintenance(formData.deviceId) || !formData.organizationId}
                 >
                   Create Record
                 </Button>
