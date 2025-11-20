@@ -95,7 +95,7 @@ const StackedBarChart: React.FC<{ active: number; archived: number; width?: numb
 };
 
 // Line chart for maintenance over the last N days
-const LineChart: React.FC<{ data: number[]; dataStatus?: Record<string, number>[]; width?: number; height?: number; color?: string; onHover?: (index: number | null) => void }> = ({ data, dataStatus = [], width = 320, height = 160, color = '#10b981', onHover }) => {
+const LineChart: React.FC<{ data: number[]; dataStatus?: Record<string, number>[]; width?: number; height?: number; color?: string; onHover?: (index: number | null) => void; showTooltip?: boolean }> = ({ data, dataStatus = [], width = 320, height = 160, color = '#10b981', onHover, showTooltip = true }) => {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = React.useState<number | null>(null);
   const [hoverPos, setHoverPos] = React.useState<{ x: number; y: number } | null>(null);
@@ -161,14 +161,14 @@ const LineChart: React.FC<{ data: number[]; dataStatus?: Record<string, number>[
         {points.map((p, i) => (
           <circle key={i} cx={p.x} cy={p.y} r={3.5} fill="#fff" stroke={color} strokeWidth={1.5} />
         ))}
-        {hoverIdx !== null && hoverPos && (
+        {showTooltip && hoverIdx !== null && hoverPos && (
           <g pointerEvents="none">
             <line x1={hoverPos.x} x2={hoverPos.x} y1={padding} y2={h - padding} stroke="#0f172a" strokeWidth={0.6} opacity={0.08} />
           </g>
         )}
       </svg>
 
-      {hoverIdx !== null && hoverPos && (
+      {showTooltip && hoverIdx !== null && hoverPos && (
         <div className="absolute z-20" style={{ left: Math.min(Math.max(0, hoverPos.x + 8), w - 180), top: hoverPos.y - 8 }}>
           <div className="bg-white shadow-lg border rounded-md text-sm p-2 w-44">
             <div className="font-semibold">Day {hoverIdx + 1}</div>
@@ -195,6 +195,73 @@ const LineChart: React.FC<{ data: number[]; dataStatus?: Record<string, number>[
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// Compact interactive PieChart for status breakdown (lightweight SVG donut)
+const PieChart: React.FC<{ counts: Record<string, number>; size?: number; onHover?: (key: string | null) => void; activeKey?: string | null }> = ({ counts = {}, size = 120, onHover, activeKey = null }) => {
+  const statusOrder = ['Yet to Start', 'In Progress', 'Completed', 'Cancelled'];
+  const colorMap: Record<string, string> = {
+    'Yet to Start': '#94a3b8',
+    'In Progress': '#f59e0b',
+    'Completed': '#10b981',
+    'Cancelled': '#ef4444',
+  };
+  const total = statusOrder.reduce((s, k) => s + (counts[k] || 0), 0) || 1;
+  const radius = size / 2;
+  const innerRadius = radius * 0.5;
+  const [localHover, setLocalHover] = React.useState<string | null>(null);
+
+  // build arcs and mid angles for hover offset
+  let startAngle = -Math.PI / 2;
+  const slices = statusOrder.map((k) => {
+    const value = counts[k] || 0;
+    const angle = (value / total) * Math.PI * 2;
+    const endAngle = startAngle + angle;
+    const large = angle > Math.PI ? 1 : 0;
+    const x1 = radius + radius * Math.cos(startAngle);
+    const y1 = radius + radius * Math.sin(startAngle);
+    const x2 = radius + radius * Math.cos(endAngle);
+    const y2 = radius + radius * Math.sin(endAngle);
+    const mid = startAngle + angle / 2;
+    const path = `M ${radius} ${radius} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`;
+    startAngle = endAngle;
+    return { key: k, value, path, color: colorMap[k] || '#ddd', angle, mid };
+  });
+
+  const effectiveHover = activeKey !== null ? activeKey : localHover;
+
+  return (
+    <div style={{ width: size, height: size, position: 'relative' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {slices.map((s) => {
+          const isHovered = effectiveHover === s.key;
+          // translate outward slightly on hover using mid angle
+          const offset = isHovered ? 6 : 0;
+          const dx = offset * Math.cos(s.mid);
+          const dy = offset * Math.sin(s.mid);
+          // use CSS transform for smoother animations (translate + scale)
+          const transform = `translate(${dx}px, ${dy}px) scale(${isHovered ? 1.06 : 1})`;
+          return (
+            <g key={s.key} style={{ transform, transformOrigin: `${radius}px ${radius}px`, transition: 'transform 180ms cubic-bezier(.2,.9,.2,1), opacity 140ms ease' }}>
+              <path
+                d={s.path}
+                fill={s.color}
+                opacity={effectiveHover && effectiveHover !== s.key ? 0.35 : 1}
+                onMouseEnter={() => { setLocalHover(s.key); onHover && onHover(s.key); }}
+                onMouseLeave={() => { setLocalHover(null); onHover && onHover(null); }}
+                aria-label={`${s.key}: ${s.value}`}
+                role="img"
+                style={{ transition: 'opacity 140ms ease' }}
+              />
+            </g>
+          );
+        })}
+        {/* donut hole to make it look modern */}
+        <circle cx={radius} cy={radius} r={innerRadius} fill="#fff" />
+      </svg>
+      {/* intentionally no center text (user requested removal of '1 items') */}
     </div>
   );
 };
@@ -246,6 +313,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
   });
   const [loading, setLoading] = useState(true);
   const [hoveredDayIndex, setHoveredDayIndex] = useState<number | null>(null);
+  const [hoveredStatus, setHoveredStatus] = useState<string | null>(null);
+
+  // compute a formatted date string for the currently selected day (hovered or latest)
+  const selectedDayStr = React.useMemo(() => {
+    const len = stats.maintenanceByDay && stats.maintenanceByDay.length ? stats.maintenanceByDay.length : 30;
+    const idx = (hoveredDayIndex !== null && hoveredDayIndex !== undefined) ? hoveredDayIndex : (len - 1);
+    const oldest = new Date();
+    oldest.setHours(0, 0, 0, 0);
+    oldest.setDate(oldest.getDate() - (len - 1)); // oldest day in the series
+    const sel = new Date(oldest);
+    sel.setDate(oldest.getDate() + idx);
+    return sel.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }, [stats.maintenanceByDay, hoveredDayIndex]);
+
+  // index to display (hovered day or latest)
+  const displayDayIndex = (hoveredDayIndex !== null && hoveredDayIndex !== undefined) ? hoveredDayIndex : (stats.maintenanceByDay.length - 1);
 
   useEffect(() => {
     fetchStats();
@@ -461,8 +544,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
           </CardHeader>
             <CardContent className="space-y-2 p-3">
             <div className="flex flex-col md:flex-row items-right gap-4">
-              <div className="flex-1 w-full md:w-auto">
-                <LineChart data={stats.maintenanceByDay} dataStatus={stats.maintenanceByDayStatus} width={320} height={160} color="#10b981" onHover={(i) => setHoveredDayIndex(i)} />
+              <div className="flex-1 w-full md:w-auto flex items-center justify-center">
+                <div className="relative w-full flex items-center justify-center">
+                  {/* decorative water dispenser behind the chart, low opacity */}
+                  <div className="hidden md:block absolute left-4 top-1/2 transform -translate-y-1/2 pointer-events-none opacity-20">
+                    <WaterDispenser className="w-24 h-24 text-gray-400" />
+                  </div>
+                  <div style={{ maxWidth: 420, width: '100%' }}>
+                    <LineChart data={stats.maintenanceByDay} dataStatus={stats.maintenanceByDayStatus} width={320} height={160} color="#10b981" showTooltip={false} onHover={(i) => setHoveredDayIndex(i)} />
+                  </div>
+                </div>
               </div>
               <div className="w-full md:w-36 text-center md:text-right relative z-10">
                 <div className="text-lg font-semibold text-green-600">{stats.recentMaintenance}</div>
@@ -474,7 +565,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
           </CardContent>  
         </Card>
 
-        <Card className="shadow-sm hover:shadow-md transition-shadow min-h-32">
+        <Card className="relative shadow-sm hover:shadow-md transition-shadow min-h-32">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-gray-100">
@@ -483,26 +574,68 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
               <span>Day Breakdown</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-3 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="text-sm text-gray-600">Selected Day</div>
-              <div className="flex flex-col gap-2 items-stretch">
-                {['Yet to Start', 'In Progress', 'Completed', 'Cancelled'].map((s) => {
-                  const displayIdx = (hoveredDayIndex !== null && hoveredDayIndex !== undefined) ? hoveredDayIndex : (stats.maintenanceByDay.length - 1);
-                  const cnt = (stats.maintenanceByDayStatus && stats.maintenanceByDayStatus[displayIdx] && stats.maintenanceByDayStatus[displayIdx][s]) || 0;
-                  const styleMap: Record<string, string> = {
-                    'Yet to Start': 'bg-gray-100 text-gray-800 border border-gray-300',
-                    'In Progress': 'bg-yellow-100 text-yellow-800 border border-yellow-300',
-                    'Completed': 'bg-green-100 text-green-800 border border-green-300',
-                    'Cancelled': 'bg-red-100 text-red-800 border border-red-300',
-                  };
-                  return (
-                    <div key={s} className="flex items-center justify-between px-3 py-2 rounded-md shadow-sm" >
-                      <div className={`px-3 py-1 rounded-md ${styleMap[s]} font-semibold`}>{s}</div>
-                      <div className="ml-3 text-lg font-bold text-gray-800">{cnt}</div>
-                    </div>
-                  );
-                })}
+          {/* decorative dispenser icon placed to the left outside the card content area */}
+          <div className="hidden md:block absolute -left-10 top-1/2 transform -translate-y-1/2 pointer-events-none opacity-20">
+            <WaterDispenser className="w-16 h-16 text-gray-400" />
+          </div>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 flex flex-col items-center">
+                {/* Pie chart showing counts for the currently selected day */}
+                <div className="mb-2">
+                  <PieChart
+                    counts={(stats.maintenanceByDayStatus && stats.maintenanceByDayStatus[displayDayIndex]) || {}}
+                    size={120}
+                    onHover={(k) => setHoveredStatus(k)}
+                    activeKey={hoveredStatus}
+                  />
+                </div>
+                {/* small decorative image fallback below pie */}
+                <div className="hidden md:block relative w-24 h-12 bg-white rounded overflow-hidden shadow-sm flex items-center justify-center mt-2">
+                  <WaterDispenser className="absolute inset-0 m-auto w-16 h-8 text-gray-400 opacity-20" />
+                  <img
+                    src="/brand-logo.png"
+                    alt="dispenser"
+                    className="relative z-10 w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="text-sm text-gray-600">Selected Day </div>
+                <div className="text-sm font-semibold text-gray-800 mb-3">{selectedDayStr}</div>
+                <div className="flex flex-col gap-0 items-stretch">
+                  {['Yet to Start', 'In Progress', 'Completed', 'Cancelled'].map((s) => {
+                    const displayIdx = (hoveredDayIndex !== null && hoveredDayIndex !== undefined) ? hoveredDayIndex : (stats.maintenanceByDay.length - 1);
+                    const cnt = (stats.maintenanceByDayStatus && stats.maintenanceByDayStatus[displayIdx] && stats.maintenanceByDayStatus[displayIdx][s]) || 0;
+                    const baseMap: Record<string, string> = {
+                      'Yet to Start': 'bg-gray-100 text-gray-800 border border-gray-300',
+                    'In Progress': 'bg-orange-300 text-yellow-900 border-yellow-400 ',
+
+                      'Completed': 'bg-green-100 text-green-800 border border-green-300',
+                      'Cancelled': 'bg-red-200 text-red-900 border border-red-300',
+                    };
+                    const isHovered = hoveredStatus === s;
+                    const hoverClass = isHovered ? 'ring-2 r  ing-offset-1' + (s === 'In Progress' ? ' ring-yellow-40' : s === 'Cancelled' ? ' ring-red-300' : s === 'Completed' ? ' ring-green-300' : ' ring-gray-300') : '';
+                    return (
+                      <div
+                        key={s}
+                        className={`flex items-center justify-between px-3 py-2 rounded-md shadow-sm ${hoverClass}`}
+                        onMouseEnter={() => setHoveredStatus(s)}
+                        onMouseLeave={() => setHoveredStatus(null)}
+                        style={{
+                          transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+                          transition: 'transform 180ms cubic-bezier(.2,.9,.2,1), opacity 160ms ease, box-shadow 160ms ease',
+                          opacity: (hoveredStatus && hoveredStatus !== s) ? 0.65 : 1,
+                          boxShadow: isHovered ? '0 8px 22px rgba(2,6,23,0.06)' : undefined,
+                        }}
+                      >
+                        <div className={`px-3 py-1 rounded-md ${baseMap[s]} font-semibold`}>{s}</div>
+                        <div className="ml-3 text-lg font-bold text-gray-800">{cnt}</div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </CardContent>
