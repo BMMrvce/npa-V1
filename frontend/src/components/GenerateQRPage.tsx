@@ -214,7 +214,9 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
     }
 
     const org = organizations.find(o => o.id === selectedOrg);
-    const printablePages = pages.map((pageDevices) => {
+    // remove any empty pages (defensive) and prepare printable pages
+    const safePages = pages.filter(p => Array.isArray(p) && p.length > 0);
+    const printablePages = safePages.map((pageDevices) => {
       const itemsHtml = pageDevices.map(dev => {
         const img = imageMap[dev.id] || '';
         // print serial number only per request
@@ -233,42 +235,69 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
     }).join('\n');
 
       const html = `
-      <html>
-        <head>
-          <title>QR Codes - ${org?.name || ''}</title>
+        <html>
+          <head>
+            <title>QR Codes - ${org?.name || ''}</title>
             <style>
-            /* Set default printed page to A4 landscape */
-            @page { size: A4 landscape; margin: 8mm; }
-            @media print { html, body { width: 297mm; height: 210mm; } body { margin:0; padding:0; } .page { page-break-after: auto; } .page:not(:last-child) { page-break-after: always; } }
-            body { font-family: system-ui, -apple-system,   'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 0; margin: 0; }
-            /* page grid: header spans full width then items in 4 columns for 12 per page */
-            .page { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; grid-auto-rows: min-content; justify-items: center; box-sizing: border-box; height: calc(210mm - 24mm); padding: 12mm 16mm 10mm 16mm; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; }
-            .org-header { grid-column: 1 / -1; text-align: center; font-size: 16px; font-weight: 700; margin: 6px 0 12px 0; color: #1e90ff; text-transform: uppercase; letter-spacing: 1px; justify-self: center; width: 100%; }
-            .qr-item { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top: 2px; }
-            /* slightly smaller print QR and cleaner label spacing to match sample */
-            .qr-img img { width: 160px; height:160px; object-fit:contain; background: transparent; padding:0; display:block; }
-            .qr-label { margin-top: 6px; font-size: 10px; text-align:center; font-family: 'Segoe UI', Roboto, Arial, sans-serif; color: #333; }
-            @media print { body { margin:0; } .no-print { display:none; } }
-          </style>
-        </head>
-        <body>
-          ${printablePages}
-        </body>
-      </html>
-    `;
+              /* Set default printed page to A4 landscape */
+              @page { size: A4 landscape; margin: 8mm; }
+              @media print {
+                html, body { width: 297mm; height: 210mm; }
+                body { margin:0; padding:0; }
+                .page { page-break-after: auto; }
+                .page:not(:last-child) { page-break-after: always; }
+                .no-print { display:none; }
+              }
+              body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 0; margin: 0; }
+              /* page grid: header spans full width then items in 4 columns for 12 per page */
+              .page { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; grid-auto-rows: min-content; justify-items: center; box-sizing: border-box; height: calc(210mm - 24mm); padding: 12mm 16mm 10mm 16mm; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; }
+              .org-header { grid-column: 1 / -1; text-align: center; font-size: 16px; font-weight: 700; margin: 6px 0 12px 0; color: #1e90ff; text-transform: uppercase; letter-spacing: 1px; justify-self: center; width: 100%; }
+              .qr-item { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top: 2px; }
+              /* slightly larger print QR to reduce gaps and improve scanability (increased by ~20%) */
+              .qr-img img { width: 276px; height:276px; object-fit:contain; background: transparent; padding:0; display:block; }
+              .qr-label { margin-top: 0px; font-size: 10px; text-align:center; font-family: 'Segoe UI', Roboto, Arial, sans-serif; color: #333; }
+            </style>
+          </head>
+          <body>
+            ${printablePages}
+          </body>
+        </html>
+      `;
 
-    // Always use the HTML print preview (consistent WYSIWYG grid) so every org
-    // shows the same page layout like the first screenshot. PDF generation is
-    // available but not used automatically to keep the preview consistent.
+    // Prefer generating a PDF for printing because PDF page breaks are deterministic
+    // and avoid browser print-layout quirks that can add a blank page.
+    try {
+      await generatePdfAndOpenOrPrint(selectedDevicesSorted, imageMap, org?.name || 'QR Codes');
+      return;
+    } catch (pdfErr) {
+      console.warn('PDF generation failed, falling back to HTML print preview', pdfErr);
+    }
+
+    // Fallback: use the HTML print preview (consistent WYSIWYG grid)
     const win = window.open('', '_blank');
     if (win) {
-      win.document.write(html);
+      // Embed script that waits for all images to finish loading before printing.
+      const htmlWithLoader = html.replace('</body>', `
+        <script>
+          (function waitImagesAndPrint(){
+            function allLoaded() {
+              const imgs = Array.from(document.images || []);
+              if (imgs.length === 0) return Promise.resolve();
+              return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(res => { img.onload = img.onerror = res; })));
+            }
+            allLoaded().then(() => {
+              // give browser a tiny moment to stabilise layout
+              setTimeout(() => {
+                try { window.focus(); } catch(e){}
+                try { window.print(); } catch(e){}
+              }, 150);
+            });
+          })();
+        </script>
+      </body>`);
+
+      win.document.write(htmlWithLoader);
       win.document.close();
-      // Wait a tick for images to load, then focus and open print dialog
-      setTimeout(() => {
-        try { win.focus(); } catch (e) { /* ignore */ }
-        try { win.print(); } catch (e) { /* ignore */ }
-      }, 500);
     }
   };
 
@@ -289,8 +318,9 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
     const cellH = (availH - headerH - gap * (rows - 1)) / rows;
 
     // Determine a single square image size that fits within the cell
-      const imageMaxW = Math.min(60, cellW - 10); // allow a bit larger QR in PDF
-      const imageMaxH = Math.min(60, cellH - 18);
+      // increase allowed PDF QR size by ~20%
+      const imageMaxW = Math.min(96, cellW - 10); // allow a bit larger QR in PDF
+      const imageMaxH = Math.min(96, cellH - 18);
     const imageSize = Math.min(imageMaxW, imageMaxH); // ensure square and uniform across pages/orgs
 
     // chunk items into pages of cols*rows
@@ -348,7 +378,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
         const label = (dev.serial_number || dev.code || dev.id || '').toString();
         doc.setFontSize(9);
         const labelX = x + cellW / 2;
-        const labelY = y + (imageSize || 40) + (cellH - imageSize) / 2 + 8;
+        const labelY = y + (imageSize || 40) + (cellH - imageSize) / 2 + 2;
         doc.setTextColor(51, 51, 51);
         doc.text(label, labelX, labelY, { align: 'center', maxWidth: cellW - 4 });
       }
@@ -417,7 +447,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
       </div>
 
       {/* print styles */}
-      <style>{`@media print { .no-print { display: none; } html, body { width: 297mm; height: 210mm; } body { margin:0; padding:0; background: #fff } .page { page-break-after: auto; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; box-sizing: border-box; height: calc(210mm - 24mm); padding: 12mm 16mm 10mm 16mm; } .page:not(:last-child) { page-break-after: always; } .org-header { text-transform: uppercase; letter-spacing: 1px; color:#1e90ff; font-weight:700; justify-self: center; width:100%; text-align:center; } .qr-img img { width:160px; height:160px } .qr-label { font-size:10px } }`}</style>
+      <style>{`@media print { .no-print { display: none; } html, body { width: 297mm; height: 210mm; } body { margin:0; padding:0; background: #fff } .page { page-break-after: auto; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; box-sizing: border-box; height: calc(210mm - 24mm); padding: 12mm 16mm 10mm 16mm; } .page:not(:last-child) { page-break-after: always; } .org-header { text-transform: uppercase; letter-spacing: 1px; color:#1e90ff; font-weight:700; justify-self: center; width:100%; text-align:center; } .qr-img img { width:192px; height:192px } .qr-label { font-size:10px; margin-top:0px } }`}</style>
 
       <div>
   {devicesForOrgSorted.length === 0 && <div className="text-sm text-gray-500">No devices for selected organization.</div>}
@@ -448,13 +478,13 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
 
                   <div className="flex items-center justify-center py-2">
                     {qrImages[dev.id] ? (
-                      <img src={qrImages[dev.id]} alt={dev.serial_number || dev.code || dev.name} className="w-28 h-28" />
+                      <img src={qrImages[dev.id]} alt={dev.serial_number || dev.code || dev.name} style={{ width: '134px', height: '134px' }} />
                     ) : (
                       <div className="text-xs text-gray-400">No QR generated</div>
                     )}
                   </div>
 
-                  <div className="mt-2 text-sm font-semibold text-center">{dev.serial_number}</div>
+                  <div className="mt-1 text-sm font-semibold text-center">{dev.serial_number}</div>
                   {!selectedIds[dev.id] && (
                     <div className="mt-1 text-xs text-red-600">Not Selected</div>
                   )}
