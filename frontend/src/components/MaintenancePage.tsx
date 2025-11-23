@@ -1016,19 +1016,8 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
           doc.setTextColor(120, 120, 120);
           doc.text('National Process Automation | Bengaluru-96', 15, footerY);
           doc.text('Contact: tech.npa@gmail.com | www.npautomation.in', 15, footerY + 4);
-          // Page number
-          doc.text(
-            `Page ${doc.getCurrentPageInfo().pageNumber} of ${doc.getNumberOfPages()}`,
-            pageWidth - 15,
-            footerY,
-            { align: 'right' }
-          );
-          doc.text(
-            `Generated: ${new Date().toLocaleDateString('en-IN')}`,
-            pageWidth - 15,
-            footerY + 4,
-            { align: 'right' }
-          );
+          // Page number and generated date handled after table rendering
+          // to ensure the total page count is correct. (See post-processing below.)
         }
       });
 
@@ -1059,6 +1048,20 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         doc.line(pageWidth - 70, finalY + 21, pageWidth - 20, finalY + 21);
         doc.setFontSize(7);
         doc.text('Authorized Signature', pageWidth - 45, finalY + 24, { align: 'center' });
+      }
+
+      // Post-process: write page numbers (Page X of N) and generated date
+      // after the table is fully rendered so we have the correct total page count.
+      const totalPages = doc.getNumberOfPages();
+      const genDate = new Date().toLocaleDateString('en-IN');
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        const footerY = pageHeight - 15;
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Page ${p} of ${totalPages}`, pageWidth - 15, footerY, { align: 'right' });
+        doc.text(`Generated: ${genDate}`, pageWidth - 15, footerY + 4, { align: 'right' });
       }
 
       // Save the PDF
