@@ -28,6 +28,7 @@ interface MaintenanceRecord {
   created_at: string;
 }
 
+
 interface Device {
   id: string;
   name: string;
