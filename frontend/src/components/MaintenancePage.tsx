@@ -92,7 +92,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const [editingChargesValue, setEditingChargesValue] = useState<string>('');
   // Pagination for report dialog (page starts at 1)
   const [reportPage, setReportPage] = useState<number>(1);
-  const reportPageSize = 12;
+  const reportPageSize = 10;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
