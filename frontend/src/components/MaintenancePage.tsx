@@ -92,7 +92,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const [editingChargesValue, setEditingChargesValue] = useState<string>('');
   // Pagination for report dialog (page starts at 1)
   const [reportPage, setReportPage] = useState<number>(1);
-  const reportPageSize = 10;
+  const reportPageSize = 12;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -537,7 +537,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     !maintenanceOrgFilter || r.organization_id === maintenanceOrgFilter
   );
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const pageSize = 12;
   // sort by date desc (most recent first)
   const sortedMaintenance = [...filteredMaintenance].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const totalPages = Math.max(1, Math.ceil(sortedMaintenance.length / pageSize));
