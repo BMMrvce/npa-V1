@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
-import { Plus, Building2, Edit, Eye, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Building2, Edit, Eye, Archive, ArchiveRestore, KeyRound } from 'lucide-react';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 
 interface OrganizationsPageProps {
@@ -36,6 +36,12 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authOrg, setAuthOrg] = useState<Organization | null>(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authPassword, setAuthPassword] = useState<string | null>(null);
+  const [authSaving, setAuthSaving] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [searchOrg, setSearchOrg] = useState('');
   const [orgSortBy, setOrgSortBy] = useState<'name' | 'code' | 'created'>('name');
@@ -128,10 +134,105 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
         gstNo: '',
         address: '',
       });
+
+      if (data?.credentials?.email && data?.credentials?.password && data?.organization) {
+        setAuthOrg(data.organization);
+        setAuthEmail(data.credentials.email);
+        setAuthUserId(data.organization.auth_user_id || null);
+        setAuthPassword(data.credentials.password);
+        setAuthDialogOpen(true);
+      }
       fetchOrganizations();
     } catch (error) {
       console.error('Error creating organization:', error);
       toast.error('Failed to create organization');
+    }
+  };
+
+  const openAuthDialog = async (org: Organization) => {
+    try {
+      setAuthOrg(org);
+      setAuthPassword(null);
+      setAuthUserId(null);
+      setAuthEmail('');
+      setAuthDialogOpen(true);
+
+      const res = await fetch(
+        `http://localhost:8000/make-server-60660975/organizations/${org.id}/auth`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to load org login');
+        return;
+      }
+      setAuthUserId(data.authUserId || null);
+      setAuthEmail(data.authEmail || '');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to load org login');
+    }
+  };
+
+  const saveAuthEmail = async () => {
+    if (!authOrg) return;
+    if (!authEmail || !authEmail.includes('@')) {
+      toast.error('Enter a valid email');
+      return;
+    }
+
+    try {
+      setAuthSaving(true);
+      const res = await fetch(
+        `http://localhost:8000/make-server-60660975/organizations/${authOrg.id}/auth`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ email: authEmail }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to update email');
+        return;
+      }
+      setAuthUserId(data.authUserId || authUserId);
+      setAuthPassword(data.password || null);
+      toast.success('Org login updated');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to update email');
+    } finally {
+      setAuthSaving(false);
+    }
+  };
+
+  const resetAuthPassword = async () => {
+    if (!authOrg) return;
+    try {
+      setAuthSaving(true);
+      const res = await fetch(
+        `http://localhost:8000/make-server-60660975/organizations/${authOrg.id}/auth/reset-password`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to reset password');
+        return;
+      }
+      setAuthPassword(data.password);
+      toast.success('Password reset');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to reset password');
+    } finally {
+      setAuthSaving(false);
     }
   };
 
@@ -445,6 +546,63 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
         </DialogContent>
       </Dialog>
 
+      {/* Org Login Dialog */}
+      <Dialog
+        open={authDialogOpen}
+        onOpenChange={(open: boolean) => {
+          setAuthDialogOpen(open);
+          if (!open) {
+            setAuthOrg(null);
+            setAuthEmail('');
+            setAuthUserId(null);
+            setAuthPassword(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Organization Login</DialogTitle>
+            <DialogDescription>
+              {authOrg ? `${authOrg.name} (${authOrg.organization_code})` : 'Manage org portal login'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="org-auth-email">Login Email</Label>
+              <Input
+                id="org-auth-email"
+                type="email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="npa001@npa.com"
+              />
+              {authUserId ? (
+                <p className="text-xs text-slate-500">Auth user linked.</p>
+              ) : (
+                <p className="text-xs text-slate-500">No auth user linked yet (saving will create one).</p>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={saveAuthEmail} disabled={authSaving || !authOrg}>
+                Save Email
+              </Button>
+              <Button variant="outline" onClick={resetAuthPassword} disabled={authSaving || !authOrg || !authUserId}>
+                Reset Password
+              </Button>
+            </div>
+
+            {authPassword ? (
+              <div className="rounded-md border p-3 bg-slate-50">
+                <div className="text-xs text-slate-500">Generated password (copy now)</div>
+                <div className="mt-1 font-mono text-sm break-all">{authPassword}</div>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="shadow-sm border-2 border-gray-400">
         <CardHeader className="bg-white border-b-2 border-gray-400 py-4">
           <div className="flex items-center justify-between">
@@ -540,6 +698,15 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                         <Eye className="w-4 h-4" />
                       </Button>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openAuthDialog(org)}
+                      className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                      title="Organization login"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"

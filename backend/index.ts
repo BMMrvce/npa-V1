@@ -40,16 +40,28 @@ const getSupabaseClient = () => {
 
 // Auth middleware
 const requireAuth = async (c: any, next: any) => {
-  const accessToken = c.req.header('Authorization')?.split(' ')[1];
-  if (!accessToken) {
+  const authHeader = c.req.header('Authorization') || '';
+  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '';
+  const looksLikeJwt = (t: string) => t.split('.').length === 3;
+
+  if (!accessToken || accessToken === 'undefined' || accessToken === 'null' || !looksLikeJwt(accessToken)) {
     return c.json({ error: 'Unauthorized - No token provided' }, 401);
   }
 
   const supabase = getSupabaseAdmin();
-  const { data: { user }, error } = await supabase.auth.getUser(accessToken);
-  
-  if (error || !user) {
-    console.log('Authorization error in requireAuth middleware:', error);
+  let user: any = null;
+  try {
+    const res = await supabase.auth.getUser(accessToken);
+    user = res?.data?.user ?? null;
+    const error = res?.error;
+
+    if (error || !user) {
+      // Avoid noisy stack traces for expected auth failures (missing/expired/invalid tokens).
+      // If you need to debug auth, temporarily add logging of error?.name / error?.message.
+      return c.json({ error: 'Unauthorized - Invalid token' }, 401);
+    }
+  } catch (e) {
+    // auth-js can throw (e.g. AuthSessionMissingError) for malformed or empty JWTs.
     return c.json({ error: 'Unauthorized - Invalid token' }, 401);
   }
 
@@ -57,9 +69,109 @@ const requireAuth = async (c: any, next: any) => {
   await next();
 };
 
+type UserRole = 'admin' | 'organization' | 'technician';
+type UserProfile = {
+  user_id: string;
+  role: UserRole;
+  organization_id: string | null;
+  technician_id: string | null;
+};
+
+const getOrCreateImplicitAdminProfile = async (userId: string) => {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('user_id, role, organization_id, technician_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.log('Error fetching profile:', error);
+    // Backwards-compatible fallback if migration hasn't been run yet.
+    return {
+      user_id: userId,
+      role: 'admin',
+      organization_id: null,
+      technician_id: null,
+    } satisfies UserProfile;
+  }
+
+  if (data) return data as UserProfile;
+
+  // Backwards-compatible default: if no profile row exists, treat as admin.
+  const { data: created, error: createErr } = await supabase
+    .from('profiles')
+    .insert({ user_id: userId, role: 'admin' })
+    .select('user_id, role, organization_id, technician_id')
+    .single();
+
+  if (createErr) {
+    console.log('Error creating implicit admin profile:', createErr);
+    // If profile insert fails (e.g., missing table), still allow app to function as admin.
+    return {
+      user_id: userId,
+      role: 'admin',
+      organization_id: null,
+      technician_id: null,
+    } satisfies UserProfile;
+  }
+
+  return created as UserProfile;
+};
+
+const requireRole = (allowed: UserRole[]) => {
+  return async (c: any, next: any) => {
+    try {
+      const userId = (c as any).get('userId') as string;
+      const profile = await getOrCreateImplicitAdminProfile(userId);
+      (c as any).set('profile', profile);
+      if (!allowed.includes(profile.role)) {
+        return c.json({ error: 'Forbidden' }, 403);
+      }
+      await next();
+    } catch (e) {
+      console.log('Error in requireRole:', e);
+      return c.json({ error: 'Internal server error' }, 500);
+    }
+  };
+};
+
 // Health check endpoint
 app.get("/make-server-60660975/health", (c) => {
   return c.json({ status: "ok" });
+});
+
+// Current user role info
+app.get('/make-server-60660975/me', requireAuth, async (c) => {
+  try {
+    const userId = (c as any).get('userId') as string;
+    const profile = await getOrCreateImplicitAdminProfile(userId);
+    return c.json({
+      userId,
+      role: profile.role,
+      organizationId: profile.organization_id,
+      technicianId: profile.technician_id,
+    });
+  } catch (e) {
+    console.log('Error in /me:', e);
+    return c.json({ error: 'Failed to load profile' }, 500);
+  }
+});
+
+app.get('/me', requireAuth, async (c) => {
+  try {
+    const userId = (c as any).get('userId') as string;
+    const profile = await getOrCreateImplicitAdminProfile(userId);
+    return c.json({
+      userId,
+      role: profile.role,
+      organizationId: profile.organization_id,
+      technicianId: profile.technician_id,
+    });
+  } catch (e) {
+    console.log('Error in /me:', e);
+    return c.json({ error: 'Failed to load profile' }, 500);
+  }
 });
 
 // ==================== AUTH ROUTES ====================
@@ -123,7 +235,7 @@ app.get("/test/schema", requireAuth, async (c) => {
 });
 
 // Get all organizations
-app.get("/make-server-60660975/organizations", requireAuth, async (c) => {
+app.get("/make-server-60660975/organizations", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const supabase = getSupabaseAdmin();
     const { data: organizations, error } = await supabase
@@ -144,7 +256,7 @@ app.get("/make-server-60660975/organizations", requireAuth, async (c) => {
 });
 
 // Duplicate route without prefix
-app.get("/organizations", requireAuth, async (c) => {
+app.get("/organizations", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const supabase = getSupabaseAdmin();
     const { data: organizations, error } = await supabase
@@ -165,7 +277,7 @@ app.get("/organizations", requireAuth, async (c) => {
 });
 
 // Create organization
-app.post("/make-server-60660975/organizations", requireAuth, async (c) => {
+app.post("/make-server-60660975/organizations", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const { companyName, pan, phoneNo, email, gstNo, address } = await c.req.json();
     
@@ -216,7 +328,57 @@ app.post("/make-server-60660975/organizations", requireAuth, async (c) => {
       throw new Error(error.message);
     }
 
-    return c.json({ success: true, organization: data });
+    // Auto-create org portal auth user + link profile (RBAC)
+    const orgRow = data as any;
+    const orgId = String(orgRow.id);
+    const orgCode = String(orgRow.organization_code || '').trim();
+    const orgCodeNoDash = orgCode.replace(/[^A-Za-z0-9]/g, '');
+    const emailLocal = orgCode.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const orgAuthEmail = `${emailLocal}@npa.com`;
+    const orgNameSafe = String(companyName || '')
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 24) || 'org';
+    const orgAuthPassword = `${orgCodeNoDash}@${orgNameSafe}`;
+
+    const { data: createdUser, error: authErr } = await supabase.auth.admin.createUser({
+      email: orgAuthEmail,
+      password: orgAuthPassword,
+      user_metadata: { name: companyName, organization_id: orgId },
+      email_confirm: true,
+    });
+
+    if (authErr || !createdUser?.user) {
+      console.log('Error creating org auth user:', authErr);
+      // Rollback org creation to keep workflow consistent
+      await supabase.from('organizations').delete().eq('id', orgId);
+      return c.json({ error: authErr?.message || 'Failed to create organization user' }, 500);
+    }
+
+    const authUserId = createdUser.user.id;
+
+    // Link profile
+    const { error: profileErr } = await supabase
+      .from('profiles')
+      .upsert({ user_id: authUserId, role: 'organization', organization_id: orgId }, { onConflict: 'user_id' });
+    if (profileErr) {
+      console.log('Error creating org profile:', profileErr);
+      // Rollback both to avoid dangling users
+      await supabase.auth.admin.deleteUser(authUserId);
+      await supabase.from('organizations').delete().eq('id', orgId);
+      return c.json({ error: 'Failed to link organization user' }, 500);
+    }
+
+    // Persist auth link on org row (best-effort if columns exist)
+    await supabase
+      .from('organizations')
+      .update({ auth_user_id: authUserId, auth_email: orgAuthEmail, updated_at: new Date().toISOString() })
+      .eq('id', orgId);
+
+    return c.json({
+      success: true,
+      organization: { ...orgRow, auth_user_id: authUserId, auth_email: orgAuthEmail },
+      credentials: { email: orgAuthEmail, password: orgAuthPassword },
+    });
   } catch (error) {
     console.log('Error creating organization:', error);
     return c.json({ error: 'Failed to create organization' }, 500);
@@ -224,7 +386,7 @@ app.post("/make-server-60660975/organizations", requireAuth, async (c) => {
 });
 
 // Update organization
-app.put("/make-server-60660975/organizations/:id", requireAuth, async (c) => {
+app.put("/make-server-60660975/organizations/:id", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const orgId = c.req.param('id');
     const { companyName, pan, phoneNo, email, gstNo, address } = await c.req.json();
@@ -259,7 +421,7 @@ app.put("/make-server-60660975/organizations/:id", requireAuth, async (c) => {
     return c.json({ error: 'Failed to update organization' }, 500);
   }
 });// Archive/Unarchive organization
-app.patch("/make-server-60660975/organizations/:id/archive", requireAuth, async (c) => {
+app.patch("/make-server-60660975/organizations/:id/archive", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const orgId = c.req.param('id');
     const { archived } = await c.req.json();
@@ -287,7 +449,7 @@ app.patch("/make-server-60660975/organizations/:id/archive", requireAuth, async 
 });
 
 // Delete organization (keep as fallback)
-app.delete("/make-server-60660975/organizations/:id", requireAuth, async (c) => {
+app.delete("/make-server-60660975/organizations/:id", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const orgId = c.req.param('id');
     
@@ -305,6 +467,177 @@ app.delete("/make-server-60660975/organizations/:id", requireAuth, async (c) => 
   } catch (error) {
     console.log('Error deleting organization:', error);
     return c.json({ error: 'Failed to delete organization' }, 500);
+  }
+});
+
+// Admin: get/update org portal auth (email) and reset password
+app.get('/make-server-60660975/organizations/:id/auth', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const orgId = c.req.param('id');
+    const supabase = getSupabaseAdmin();
+
+    const { data: org, error } = await supabase
+      .from('organizations')
+      .select('id,name,organization_code')
+      .eq('id', orgId)
+      .single();
+
+    if (error) {
+      console.log('Error loading organization:', error);
+      return c.json({ error: 'Failed to load organization' }, 500);
+    }
+    if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+    // Resolve auth user via profiles (works even without organizations.auth_user_id/auth_email columns)
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('role', 'organization')
+      .eq('organization_id', orgId)
+      .maybeSingle();
+
+    const authUserId = (profileRow as any)?.user_id || null;
+    let authEmail: string | null = null;
+    if (authUserId) {
+      const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(authUserId);
+      if (!userErr) authEmail = userData?.user?.email || null;
+    }
+
+    // Fallback email if not stored yet
+    const orgCode = String((org as any).organization_code || '').trim();
+    const emailLocal = orgCode.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const computedEmail = `${emailLocal}@npa.com`;
+
+    return c.json({
+      organizationId: orgId,
+      authUserId,
+      authEmail: authEmail || computedEmail,
+    });
+  } catch (e) {
+    console.log('Error getting org auth:', e);
+    return c.json({ error: 'Failed to load org auth' }, 500);
+  }
+});
+
+app.put('/make-server-60660975/organizations/:id/auth', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const orgId = c.req.param('id');
+    const { email } = await c.req.json();
+    if (!email) return c.json({ error: 'email is required' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data: org, error } = await supabase
+      .from('organizations')
+      .select('id,name,organization_code')
+      .eq('id', orgId)
+      .single();
+
+    if (error) {
+      console.log('Error loading organization for auth update:', error);
+      return c.json({ error: 'Failed to load organization' }, 500);
+    }
+    if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('role', 'organization')
+      .eq('organization_id', orgId)
+      .maybeSingle();
+
+    let authUserId = (profileRow as any)?.user_id as string | null;
+    let newPassword: string | null = null;
+
+    if (!authUserId) {
+      // Create auth user if missing
+      const orgCode = String((org as any).organization_code || '').trim();
+      const orgCodeNoDash = orgCode.replace(/[^A-Za-z0-9]/g, '');
+      const orgNameSafe = String((org as any).name || '')
+        .replace(/[^A-Za-z0-9]/g, '')
+        .slice(0, 24) || 'org';
+      newPassword = `${orgCodeNoDash}@${orgNameSafe}`;
+
+      const { data: createdUser, error: createErr } = await supabase.auth.admin.createUser({
+        email,
+        password: newPassword,
+        user_metadata: { name: (org as any).name, organization_id: orgId },
+        email_confirm: true,
+      });
+      if (createErr || !createdUser?.user) {
+        return c.json({ error: createErr?.message || 'Failed to create auth user' }, 500);
+      }
+      authUserId = createdUser.user.id;
+
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .upsert({ user_id: authUserId, role: 'organization', organization_id: orgId }, { onConflict: 'user_id' });
+      if (profileErr) {
+        await supabase.auth.admin.deleteUser(authUserId);
+        return c.json({ error: 'Failed to link org profile' }, 500);
+      }
+    } else {
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(authUserId, {
+        email,
+        email_confirm: true,
+      });
+      if (updateErr) return c.json({ error: updateErr.message }, 400);
+    }
+
+    // Best-effort: persist auth link on org row if columns exist
+    await supabase
+      .from('organizations')
+      .update({ auth_user_id: authUserId, auth_email: email, updated_at: new Date().toISOString() })
+      .eq('id', orgId);
+
+    return c.json({ success: true, authUserId, authEmail: email, password: newPassword });
+  } catch (e) {
+    console.log('Error updating org auth:', e);
+    return c.json({ error: 'Failed to update org auth' }, 500);
+  }
+});
+
+app.post('/make-server-60660975/organizations/:id/auth/reset-password', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const orgId = c.req.param('id');
+    const supabase = getSupabaseAdmin();
+    const { data: org, error } = await supabase
+      .from('organizations')
+      .select('id,name,organization_code')
+      .eq('id', orgId)
+      .single();
+
+    if (error) {
+      console.log('Error loading organization for password reset:', error);
+      return c.json({ error: 'Failed to load organization' }, 500);
+    }
+    if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+    const orgCode = String((org as any).organization_code || '').trim();
+    const orgCodeNoDash = orgCode.replace(/[^A-Za-z0-9]/g, '');
+    const orgNameSafe = String((org as any).name || '')
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 24) || 'org';
+    const password = `${orgCodeNoDash}@${orgNameSafe}`;
+
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('role', 'organization')
+      .eq('organization_id', orgId)
+      .maybeSingle();
+
+    const authUserId = (profileRow as any)?.user_id as string | null;
+    if (!authUserId) {
+      return c.json({ error: 'Org auth user not created yet. Set email first.' }, 400);
+    }
+
+    const { error: updateErr } = await supabase.auth.admin.updateUserById(authUserId, { password });
+    if (updateErr) return c.json({ error: updateErr.message }, 400);
+
+    return c.json({ success: true, password });
+  } catch (e) {
+    console.log('Error resetting org password:', e);
+    return c.json({ error: 'Failed to reset password' }, 500);
   }
 });
 
@@ -383,7 +716,7 @@ app.post("/make-server-60660975/devices", requireAuth, async (c) => {
     const deviceCount = (existingDevices?.length || 0) + 1;
 
     // Prepare a sanitized organization code so serials include full 'NPA-XXX' form.
-    let orgCodeRaw = String(org.organization_code || org.code || 'ORG').trim();
+    let orgCodeRaw = String(org.organization_code || 'ORG').trim();
     // Collapse multiple leading 'NPA-' into a single 'NPA-'
     let orgCodeSafe = orgCodeRaw.replace(/^(?:NPA-)+/i, 'NPA-');
     // If it doesn't start with NPA-, prefix it so serials become 'NPA-XXX'
@@ -589,8 +922,21 @@ app.patch("/make-server-60660975/devices/:id/archive", requireAuth, async (c) =>
 
 // ==================== TECHNICIAN ROUTES ====================
 
+const computeTechAuth = (techName: string) => {
+  const local = String(techName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 40) || 'technician';
+  return {
+    email: `${local}@npa.com`,
+    password: `${local}@npa`,
+    local,
+  };
+};
+
 // Get all technicians
-app.get("/make-server-60660975/technicians", requireAuth, async (c) => {
+app.get("/make-server-60660975/technicians", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const supabase = getSupabaseAdmin();
     const { data: technicians, error } = await supabase
@@ -608,7 +954,7 @@ app.get("/make-server-60660975/technicians", requireAuth, async (c) => {
 });
 
 // Duplicate route without prefix
-app.get("/technicians", requireAuth, async (c) => {
+app.get("/technicians", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const supabase = getSupabaseAdmin();
     const { data: technicians, error } = await supabase
@@ -626,7 +972,7 @@ app.get("/technicians", requireAuth, async (c) => {
 });
 
 // Create technician
-app.post("/make-server-60660975/technicians", requireAuth, async (c) => {
+app.post("/make-server-60660975/technicians", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const { name, contactNo, email, pan, aadhar } = await c.req.json();
     
@@ -665,7 +1011,47 @@ app.post("/make-server-60660975/technicians", requireAuth, async (c) => {
       throw new Error(error.message);
     }
 
-    return c.json({ success: true, technician: data });
+    // Auto-create technician portal auth user + link profile (RBAC)
+    const techRow = data as any;
+    const techId = String(techRow.id);
+    const { email: techAuthEmail, password: techAuthPassword } = computeTechAuth(name);
+
+    const { data: createdUser, error: authErr } = await supabase.auth.admin.createUser({
+      email: techAuthEmail,
+      password: techAuthPassword,
+      user_metadata: { name, technician_id: techId },
+      email_confirm: true,
+    });
+
+    if (authErr || !createdUser?.user) {
+      console.log('Error creating technician auth user:', authErr);
+      await supabase.from('technicians').delete().eq('id', techId);
+      return c.json({ error: authErr?.message || 'Failed to create technician user' }, 500);
+    }
+
+    const authUserId = createdUser.user.id;
+
+    const { error: profileErr } = await supabase
+      .from('profiles')
+      .upsert({ user_id: authUserId, role: 'technician', technician_id: techId }, { onConflict: 'user_id' });
+    if (profileErr) {
+      console.log('Error creating technician profile:', profileErr);
+      await supabase.auth.admin.deleteUser(authUserId);
+      await supabase.from('technicians').delete().eq('id', techId);
+      return c.json({ error: 'Failed to link technician user' }, 500);
+    }
+
+    // Persist auth link on technician row (best-effort if columns exist)
+    await supabase
+      .from('technicians')
+      .update({ auth_user_id: authUserId, auth_email: techAuthEmail, updated_at: new Date().toISOString() })
+      .eq('id', techId);
+
+    return c.json({
+      success: true,
+      technician: { ...techRow, auth_user_id: authUserId, auth_email: techAuthEmail },
+      credentials: { email: techAuthEmail, password: techAuthPassword },
+    });
   } catch (error) {
     console.log('Error creating technician:', error);
     return c.json({ error: 'Failed to create technician' }, 500);
@@ -673,7 +1059,7 @@ app.post("/make-server-60660975/technicians", requireAuth, async (c) => {
 });
 
 // Update technician
-app.put("/make-server-60660975/technicians/:id", requireAuth, async (c) => {
+app.put("/make-server-60660975/technicians/:id", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const techId = c.req.param('id');
     const { name, contactNo, email, pan, aadhar } = await c.req.json();
@@ -713,7 +1099,7 @@ app.put("/make-server-60660975/technicians/:id", requireAuth, async (c) => {
 });
 
 // Archive/Unarchive technician
-app.patch("/make-server-60660975/technicians/:id/archive", requireAuth, async (c) => {
+app.patch("/make-server-60660975/technicians/:id/archive", requireAuth, requireRole(['admin']), async (c) => {
   try {
     const techId = c.req.param('id');
     const { archived } = await c.req.json();
@@ -745,6 +1131,164 @@ app.patch("/make-server-60660975/technicians/:id/archive", requireAuth, async (c
   } catch (error) {
     console.log('Error archiving technician:', error);
     return c.json({ error: 'Failed to archive technician' }, 500);
+  }
+});
+
+// Admin: get/update technician portal auth (email) and reset password
+app.get('/make-server-60660975/technicians/:id/auth', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const techId = c.req.param('id');
+    const supabase = getSupabaseAdmin();
+
+    const { data: tech, error } = await supabase
+      .from('technicians')
+      .select('id,name')
+      .eq('id', techId)
+      .single();
+
+    if (error) {
+      console.log('Error loading technician:', error);
+      return c.json({ error: 'Failed to load technician' }, 500);
+    }
+    if (!tech) return c.json({ error: 'Technician not found' }, 404);
+
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('role', 'technician')
+      .eq('technician_id', techId)
+      .maybeSingle();
+
+    const authUserId = (profileRow as any)?.user_id || null;
+    let authEmail: string | null = null;
+    if (authUserId) {
+      const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(authUserId);
+      if (!userErr) authEmail = userData?.user?.email || null;
+    }
+
+    const computedEmail = computeTechAuth(String((tech as any).name || '')).email;
+    return c.json({
+      technicianId: techId,
+      authUserId,
+      authEmail: authEmail || computedEmail,
+    });
+  } catch (e) {
+    console.log('Error getting technician auth:', e);
+    return c.json({ error: 'Failed to load technician auth' }, 500);
+  }
+});
+
+app.put('/make-server-60660975/technicians/:id/auth', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const techId = c.req.param('id');
+    const { email } = await c.req.json();
+    if (!email) return c.json({ error: 'email is required' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data: tech, error } = await supabase
+      .from('technicians')
+      .select('id,name')
+      .eq('id', techId)
+      .single();
+
+    if (error) {
+      console.log('Error loading technician for auth update:', error);
+      return c.json({ error: 'Failed to load technician' }, 500);
+    }
+    if (!tech) return c.json({ error: 'Technician not found' }, 404);
+
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('role', 'technician')
+      .eq('technician_id', techId)
+      .maybeSingle();
+
+    let authUserId = (profileRow as any)?.user_id as string | null;
+    let newPassword: string | null = null;
+
+    if (!authUserId) {
+      const { password } = computeTechAuth(String((tech as any).name || ''));
+      newPassword = password;
+
+      const { data: createdUser, error: createErr } = await supabase.auth.admin.createUser({
+        email,
+        password: newPassword,
+        user_metadata: { name: (tech as any).name, technician_id: techId },
+        email_confirm: true,
+      });
+
+      if (createErr || !createdUser?.user) {
+        return c.json({ error: createErr?.message || 'Failed to create auth user' }, 500);
+      }
+
+      authUserId = createdUser.user.id;
+
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .upsert({ user_id: authUserId, role: 'technician', technician_id: techId }, { onConflict: 'user_id' });
+      if (profileErr) {
+        await supabase.auth.admin.deleteUser(authUserId);
+        return c.json({ error: 'Failed to link technician profile' }, 500);
+      }
+    } else {
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(authUserId, {
+        email,
+        email_confirm: true,
+      });
+      if (updateErr) return c.json({ error: updateErr.message }, 400);
+    }
+
+    // Best-effort: persist auth link on technician row if columns exist
+    await supabase
+      .from('technicians')
+      .update({ auth_user_id: authUserId, auth_email: email, updated_at: new Date().toISOString() })
+      .eq('id', techId);
+
+    return c.json({ success: true, authUserId, authEmail: email, password: newPassword });
+  } catch (e) {
+    console.log('Error updating technician auth:', e);
+    return c.json({ error: 'Failed to update technician auth' }, 500);
+  }
+});
+
+app.post('/make-server-60660975/technicians/:id/auth/reset-password', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const techId = c.req.param('id');
+    const supabase = getSupabaseAdmin();
+
+    const { data: tech, error } = await supabase
+      .from('technicians')
+      .select('id,name')
+      .eq('id', techId)
+      .single();
+
+    if (error) {
+      console.log('Error loading technician for password reset:', error);
+      return c.json({ error: 'Failed to load technician' }, 500);
+    }
+    if (!tech) return c.json({ error: 'Technician not found' }, 404);
+
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('role', 'technician')
+      .eq('technician_id', techId)
+      .maybeSingle();
+
+    const authUserId = (profileRow as any)?.user_id as string | null;
+    if (!authUserId) {
+      return c.json({ error: 'Technician auth user not created yet. Set email first.' }, 400);
+    }
+
+    const { password } = computeTechAuth(String((tech as any).name || ''));
+    const { error: updateErr } = await supabase.auth.admin.updateUserById(authUserId, { password });
+    if (updateErr) return c.json({ error: updateErr.message }, 400);
+
+    return c.json({ success: true, password });
+  } catch (e) {
+    console.log('Error resetting technician password:', e);
+    return c.json({ error: 'Failed to reset password' }, 500);
   }
 });
 
@@ -1167,6 +1711,392 @@ app.post("/make-server-60660975/maintenance/bulk", requireAuth, async (c) => {
   } catch (error) {
     console.log('Error creating bulk maintenance records:', error);
     return c.json({ error: 'Failed to create bulk maintenance records' }, 500);
+  }
+});
+
+// ==================== TICKETS (RBAC) ====================
+
+// Admin: list all tickets
+app.get('/make-server-60660975/tickets', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('tickets')
+      .select(`
+        *,
+        organization:organizations(id,name,organization_code),
+        device:devices(id,name,serial_number,brand_serial_number),
+        technician:technicians(id,name)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching tickets:', error);
+      return c.json({ error: 'Failed to fetch tickets' }, 500);
+    }
+
+    return c.json({ tickets: data || [] });
+  } catch (e) {
+    console.log('Error fetching tickets:', e);
+    return c.json({ error: 'Failed to fetch tickets' }, 500);
+  }
+});
+
+// Admin: assign technician
+app.patch('/make-server-60660975/tickets/:id/assign', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const id = c.req.param('id');
+    const { technicianId } = await c.req.json();
+
+    if (!technicianId) {
+      return c.json({ error: 'technicianId is required' }, 400);
+    }
+
+    const { data: tech, error: techErr } = await supabase
+      .from('technicians')
+      .select('id')
+      .eq('id', technicianId)
+      .single();
+
+    if (techErr || !tech) {
+      return c.json({ error: 'Technician not found' }, 404);
+    }
+
+    const { data: updated, error } = await supabase
+      .from('tickets')
+      .update({
+        assigned_technician_id: technicianId,
+        status: 'in_progress',
+        assigned_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        organization:organizations(id,name,organization_code),
+        device:devices(id,name,serial_number,brand_serial_number),
+        technician:technicians(id,name)
+      `)
+      .single();
+
+    if (error) {
+      console.log('Error assigning ticket:', error);
+      return c.json({ error: 'Failed to assign ticket' }, 500);
+    }
+
+    return c.json({ success: true, ticket: updated });
+  } catch (e) {
+    console.log('Error assigning ticket:', e);
+    return c.json({ error: 'Failed to assign ticket' }, 500);
+  }
+});
+
+// Admin: update status
+app.patch('/make-server-60660975/tickets/:id/status', requireAuth, requireRole(['admin']), async (c) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const id = c.req.param('id');
+    const { status } = await c.req.json();
+
+    if (!status || !['open', 'assigned', 'in_progress', 'done'].includes(String(status))) {
+      return c.json({ error: 'Invalid status' }, 400);
+    }
+
+    const updates: any = { status };
+    if (status === 'done') {
+      updates.resolved_at = new Date().toISOString();
+    }
+
+    const { data: updated, error } = await supabase
+      .from('tickets')
+      .update(updates)
+      .eq('id', id)
+      .select(`
+        *,
+        organization:organizations(id,name,organization_code),
+        device:devices(id,name,serial_number,brand_serial_number),
+        technician:technicians(id,name)
+      `)
+      .single();
+
+    if (error) {
+      console.log('Error updating ticket status:', error);
+      return c.json({ error: 'Failed to update ticket status' }, 500);
+    }
+
+    return c.json({ success: true, ticket: updated });
+  } catch (e) {
+    console.log('Error updating ticket status:', e);
+    return c.json({ error: 'Failed to update ticket status' }, 500);
+  }
+});
+
+// Organization: dashboard counts
+app.get('/make-server-60660975/org/dashboard', requireAuth, requireRole(['organization']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const organizationId = profile.organization_id;
+    if (!organizationId) return c.json({ error: 'Organization not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data: devices, error } = await supabase
+      .from('devices')
+      .select('id,status,is_archived')
+      .eq('organization_id', organizationId);
+
+    if (error) {
+      console.log('Error fetching org devices for dashboard:', error);
+      return c.json({ error: 'Failed to load dashboard' }, 500);
+    }
+
+    const total = devices?.length || 0;
+    const archived = (devices || []).filter((d: any) => d.is_archived === true).length;
+    const active = (devices || []).filter((d: any) => d.is_archived !== true && String(d.status || '').toLowerCase() === 'active').length;
+    const inactive = total - archived - active;
+
+    const { data: tickets, error: ticketErr } = await supabase
+      .from('tickets')
+      .select('id,status')
+      .eq('organization_id', organizationId);
+
+    if (ticketErr) {
+      console.log('Error fetching org tickets for dashboard:', ticketErr);
+      return c.json({ error: 'Failed to load dashboard' }, 500);
+    }
+
+    const ticketsOpen = (tickets || []).filter((t: any) => t.status === 'open').length;
+    const ticketsAssigned = (tickets || []).filter((t: any) => t.status === 'assigned' || t.status === 'in_progress').length;
+    const ticketsDone = (tickets || []).filter((t: any) => t.status === 'done').length;
+
+    return c.json({
+      devices: { total, active, inactive, archived },
+      tickets: { open: ticketsOpen, assigned: ticketsAssigned, done: ticketsDone },
+    });
+  } catch (e) {
+    console.log('Error loading org dashboard:', e);
+    return c.json({ error: 'Failed to load dashboard' }, 500);
+  }
+});
+
+// Organization: list its devices (for ticket creation)
+app.get('/make-server-60660975/org/devices', requireAuth, requireRole(['organization']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const organizationId = profile.organization_id;
+    if (!organizationId) return c.json({ error: 'Organization not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('devices')
+      .select('id,name,serial_number,brand_serial_number,status,is_archived')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching org devices:', error);
+      return c.json({ error: 'Failed to fetch devices' }, 500);
+    }
+
+    return c.json({ devices: data || [] });
+  } catch (e) {
+    console.log('Error fetching org devices:', e);
+    return c.json({ error: 'Failed to fetch devices' }, 500);
+  }
+});
+
+// Organization: list its tickets
+app.get('/make-server-60660975/org/tickets', requireAuth, requireRole(['organization']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const organizationId = profile.organization_id;
+    if (!organizationId) return c.json({ error: 'Organization not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('tickets')
+      .select(`
+        *,
+        device:devices(id,name,serial_number,brand_serial_number),
+        technician:technicians(id,name)
+      `)
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching org tickets:', error);
+      return c.json({ error: 'Failed to fetch tickets' }, 500);
+    }
+
+    return c.json({ tickets: data || [] });
+  } catch (e) {
+    console.log('Error fetching org tickets:', e);
+    return c.json({ error: 'Failed to fetch tickets' }, 500);
+  }
+});
+
+// Organization: raise a ticket for a device in its org
+app.post('/make-server-60660975/org/tickets', requireAuth, requireRole(['organization']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const organizationId = profile.organization_id;
+    if (!organizationId) return c.json({ error: 'Organization not linked' }, 400);
+
+    const userId = (c as any).get('userId') as string;
+    const { deviceId, title, description } = await c.req.json();
+
+    if (!deviceId || !title) {
+      return c.json({ error: 'deviceId and title are required' }, 400);
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data: device, error: deviceErr } = await supabase
+      .from('devices')
+      .select('id,organization_id,is_archived')
+      .eq('id', deviceId)
+      .single();
+
+    if (deviceErr || !device) return c.json({ error: 'Device not found' }, 404);
+    if (device.organization_id !== organizationId) return c.json({ error: 'Forbidden' }, 403);
+    if (device.is_archived === true) return c.json({ error: 'Cannot raise ticket for archived device' }, 400);
+
+    const payload = {
+      organization_id: organizationId,
+      device_id: deviceId,
+      created_by: userId,
+      title: String(title).trim(),
+      description: description ? String(description) : '',
+      status: 'open',
+    };
+
+    const { data: created, error } = await supabase
+      .from('tickets')
+      .insert(payload)
+      .select(`
+        *,
+        device:devices(id,name,serial_number,brand_serial_number),
+        technician:technicians(id,name)
+      `)
+      .single();
+
+    if (error) {
+      console.log('Error creating ticket:', error);
+      return c.json({ error: 'Failed to create ticket' }, 500);
+    }
+
+    return c.json({ success: true, ticket: created });
+  } catch (e) {
+    console.log('Error creating ticket:', e);
+    return c.json({ error: 'Failed to create ticket' }, 500);
+  }
+});
+
+// Technician: dashboard counts
+app.get('/make-server-60660975/tech/dashboard', requireAuth, requireRole(['technician']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const technicianId = profile.technician_id;
+    if (!technicianId) return c.json({ error: 'Technician not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('id,status')
+      .eq('assigned_technician_id', technicianId);
+
+    if (error) {
+      console.log('Error fetching tech dashboard tickets:', error);
+      return c.json({ error: 'Failed to load dashboard' }, 500);
+    }
+
+    const total = data?.length || 0;
+    const assigned = (data || []).filter((t: any) => t.status === 'assigned' || t.status === 'in_progress').length;
+    const done = (data || []).filter((t: any) => t.status === 'done').length;
+    const open = (data || []).filter((t: any) => t.status === 'open').length;
+
+    return c.json({ tickets: { total, open, assigned, done } });
+  } catch (e) {
+    console.log('Error loading tech dashboard:', e);
+    return c.json({ error: 'Failed to load dashboard' }, 500);
+  }
+});
+
+// Technician: list assigned tickets
+app.get('/make-server-60660975/tech/tickets', requireAuth, requireRole(['technician']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const technicianId = profile.technician_id;
+    if (!technicianId) return c.json({ error: 'Technician not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('tickets')
+      .select(`
+        *,
+        organization:organizations(id,name,organization_code),
+        device:devices(id,name,serial_number,brand_serial_number)
+      `)
+      .eq('assigned_technician_id', technicianId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching tech tickets:', error);
+      return c.json({ error: 'Failed to fetch tickets' }, 500);
+    }
+
+    return c.json({ tickets: data || [] });
+  } catch (e) {
+    console.log('Error fetching tech tickets:', e);
+    return c.json({ error: 'Failed to fetch tickets' }, 500);
+  }
+});
+
+// Technician: update status of an assigned ticket
+app.patch('/make-server-60660975/tech/tickets/:id/status', requireAuth, requireRole(['technician']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const technicianId = profile.technician_id;
+    if (!technicianId) return c.json({ error: 'Technician not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const id = c.req.param('id');
+    const { status } = await c.req.json();
+
+    if (!status || !['assigned', 'in_progress', 'done'].includes(String(status))) {
+      return c.json({ error: 'Invalid status' }, 400);
+    }
+
+    const { data: existing, error: findErr } = await supabase
+      .from('tickets')
+      .select('id,assigned_technician_id,status')
+      .eq('id', id)
+      .single();
+
+    if (findErr || !existing) return c.json({ error: 'Ticket not found' }, 404);
+    if (existing.assigned_technician_id !== technicianId) return c.json({ error: 'Forbidden' }, 403);
+
+    const updates: any = { status };
+    if (status === 'done') updates.resolved_at = new Date().toISOString();
+
+    const { data: updated, error } = await supabase
+      .from('tickets')
+      .update(updates)
+      .eq('id', id)
+      .select(`
+        *,
+        organization:organizations(id,name,organization_code),
+        device:devices(id,name,serial_number,brand_serial_number)
+      `)
+      .single();
+
+    if (error) {
+      console.log('Error updating ticket status (tech):', error);
+      return c.json({ error: 'Failed to update ticket status' }, 500);
+    }
+
+    return c.json({ success: true, ticket: updated });
+  } catch (e) {
+    console.log('Error updating ticket status (tech):', e);
+    return c.json({ error: 'Failed to update ticket status' }, 500);
   }
 });
 

@@ -7,6 +7,7 @@ import { DevicesPage } from './DevicesPage';
 import { TechniciansPage } from './TechniciansPage';
 import { MaintenancePage } from './MaintenancePage';
 import { GenerateQRPage } from './GenerateQRPage';
+import { TicketsPage } from './TicketsPage';
 import { LayoutDashboard, Building2, Wrench, ClipboardList, LogOut } from 'lucide-react';
 import { WaterDispenser } from './icons/WaterDispenser';
 import { ImageWithFallback } from './figma/ImageWithFallback';
@@ -17,7 +18,7 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
-type TabType = 'overview' | 'organizations' | 'devices' | 'technicians' | 'maintenance' | 'generate-qrs';
+type TabType = 'overview' | 'organizations' | 'devices' | 'technicians' | 'maintenance' | 'tickets' | 'generate-qrs';
 
 export const Dashboard: React.FC<DashboardProps> = ({ token, user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -29,6 +30,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ token, user, onLogout }) =
     { id: 'devices' as TabType, label: 'Devices', icon: WaterDispenser },
     { id: 'technicians' as TabType, label: 'Technicians', icon: Wrench },
     { id: 'maintenance' as TabType, label: 'Maintenance', icon: ClipboardList },
+    { id: 'tickets' as TabType, label: 'Tickets', icon: ClipboardList },
     { id: 'generate-qrs' as TabType, label: 'Generate QR', icon: ClipboardList },
   ];
 
@@ -127,6 +129,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ token, user, onLogout }) =
         {activeTab === 'devices' && <DevicesPage token={token} />}
         {activeTab === 'technicians' && <TechniciansPage token={token} />}
         {activeTab === 'maintenance' && <MaintenancePage token={token} />}
+        {activeTab === 'tickets' && <TicketsPage token={token} />}
         {activeTab === 'generate-qrs' && <GenerateQRPage token={token} />}
       </div>
     </div>

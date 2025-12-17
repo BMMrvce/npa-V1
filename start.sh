@@ -9,6 +9,22 @@ sleep 1
 echo "🚀 Starting backend and frontend..."
 echo ""
 
+# Load backend envs (and pass Supabase config to Vite)
+if [ -f backend/.env ]; then
+  echo "🔐 Loading env from backend/.env"
+  set -a
+  source backend/.env
+  set +a
+
+  # Ensure frontend uses the same Supabase project as backend
+  if [ -n "${SUPABASE_URL:-}" ]; then
+    export VITE_SUPABASE_URL="$SUPABASE_URL"
+  fi
+  if [ -n "${SUPABASE_ANON_KEY:-}" ]; then
+    export VITE_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+  fi
+fi
+
 # Trap to kill all background processes on Ctrl+C
 trap 'echo ""; echo "🛑 Shutting down..."; kill 0; exit' SIGINT SIGTERM
 

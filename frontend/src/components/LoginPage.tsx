@@ -5,13 +5,16 @@ import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { createClient } from '../utils/supabase/client';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { Bold } from 'lucide-react';
+
+export type LoginVariant = 'admin' | 'organization' | 'technician';
 
 interface LoginPageProps {
   onLoginSuccess: (token: string, user: any) => void;
+  variant?: LoginVariant;
+  onBack?: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, variant = 'admin', onBack }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -89,6 +92,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       {/* Left Side - Login Form */}
       <div className="flex-1 flex items-center justify-center bg-white px-4 sm:px-6 lg:px-20 xl:px-24">
         <div className="w-full max-w-md">
+          {onBack ? (
+            <div className="mb-6">
+              <Button variant="ghost" onClick={onBack}>
+                Back
+              </Button>
+            </div>
+          ) : null}
           {/* Title (logo removed per request) */}
           {/* <div className="flex items-center gap-2 mb-8">
             <span className="text-2xl font-semibold text-gray-900">NPA</span>
@@ -97,7 +107,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           {/* Welcome Text */}
           <div className="mb-8">
             <h2 className="text-gray-900 mb-2">
-              {isLogin ? 'Welcome Back' : 'Create Account'}
+              {isLogin
+                ? variant === 'organization'
+                  ? 'Organization Login'
+                  : variant === 'technician'
+                    ? 'Technician Login'
+                    : 'Admin Login'
+                : 'Create Account'}
             </h2>
             <p className="text-gray-600">
               {isLogin ? 'Please login to your account' : 'Sign up to get started'}
@@ -126,7 +142,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <Input
                 id="email"
                 type="email"
-                placeholder="Enter your email"
+                placeholder={variant === 'organization' ? 'npa001@npa.com' : 'Enter your email'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -139,7 +155,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder={variant === 'organization' ? 'NPA001@OrgName' : 'Enter your password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -220,7 +236,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
             <div style={{ display: 'flex', justifyContent: 'center' , fontWeight:'Bold'}}>
             <h2 className="text-4xl mb-4 text-white ">
-              Welcome! ADMIN
+              {variant === 'organization'
+                ? 'Welcome! ORGANIZATION'
+                : variant === 'technician'
+                  ? 'Welcome! TECHNICIAN'
+                  : 'Welcome! ADMIN'}
             </h2>
             </div>
             <p className="text-xl text-white/90 mb-8">

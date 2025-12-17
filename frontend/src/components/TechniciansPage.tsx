@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Wrench, Edit2, Archive, ArchiveRestore, QrCode } from 'lucide-react';
+import { Plus, Wrench, Edit2, Archive, ArchiveRestore, QrCode, KeyRound } from 'lucide-react';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Badge } from './ui/badge';
 import QRCode from 'qrcode';
@@ -20,6 +20,8 @@ interface Technician {
   name: string;
   phone: string;
   email: string;
+  auth_user_id?: string | null;
+  auth_email?: string | null;
   pan?: string;
   aadhar?: string;
   code?: string;
@@ -33,6 +35,12 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTech, setEditingTech] = useState<Technician | null>(null);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authTech, setAuthTech] = useState<Technician | null>(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authPassword, setAuthPassword] = useState<string | null>(null);
+  const [authSaving, setAuthSaving] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [selectedTechnicianQr, setSelectedTechnicianQr] = useState('');
@@ -122,10 +130,105 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
         pan: '',
         aadhar: '',
       });
+
+      if (!editingTech && data?.credentials?.email && data?.credentials?.password && data?.technician) {
+        setAuthTech(data.technician);
+        setAuthEmail(data.credentials.email);
+        setAuthUserId(data.technician.auth_user_id || null);
+        setAuthPassword(data.credentials.password);
+        setAuthDialogOpen(true);
+      }
       fetchTechnicians();
     } catch (error) {
       console.error(`Error ${editingTech ? 'updating' : 'creating'} technician:`, error);
       toast.error(`Failed to ${editingTech ? 'update' : 'create'} technician`);
+    }
+  };
+
+  const openAuthDialog = async (tech: Technician) => {
+    try {
+      setAuthTech(tech);
+      setAuthPassword(null);
+      setAuthUserId(null);
+      setAuthEmail('');
+      setAuthDialogOpen(true);
+
+      const res = await fetch(
+        `http://localhost:8000/make-server-60660975/technicians/${tech.id}/auth`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to load technician login');
+        return;
+      }
+      setAuthUserId(data.authUserId || null);
+      setAuthEmail(data.authEmail || '');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to load technician login');
+    }
+  };
+
+  const saveAuthEmail = async () => {
+    if (!authTech) return;
+    if (!authEmail || !authEmail.includes('@')) {
+      toast.error('Enter a valid email');
+      return;
+    }
+
+    try {
+      setAuthSaving(true);
+      const res = await fetch(
+        `http://localhost:8000/make-server-60660975/technicians/${authTech.id}/auth`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ email: authEmail }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to update email');
+        return;
+      }
+      setAuthUserId(data.authUserId || authUserId);
+      setAuthPassword(data.password || null);
+      toast.success('Technician login updated');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to update email');
+    } finally {
+      setAuthSaving(false);
+    }
+  };
+
+  const resetAuthPassword = async () => {
+    if (!authTech) return;
+    try {
+      setAuthSaving(true);
+      const res = await fetch(
+        `http://localhost:8000/make-server-60660975/technicians/${authTech.id}/auth/reset-password`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to reset password');
+        return;
+      }
+      setAuthPassword(data.password);
+      toast.success('Password reset');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to reset password');
+    } finally {
+      setAuthSaving(false);
     }
   };
 
@@ -432,6 +535,14 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => openAuthDialog(tech)}
+                      title="Technician login"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleEdit(tech)}
                     >
                       <Edit2 className="w-4 h-4" />
@@ -451,6 +562,63 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
           )}
         </CardContent>
       </Card>
+
+      {/* Technician Login Dialog */}
+      <Dialog
+        open={authDialogOpen}
+        onOpenChange={(open: boolean) => {
+          setAuthDialogOpen(open);
+          if (!open) {
+            setAuthTech(null);
+            setAuthEmail('');
+            setAuthUserId(null);
+            setAuthPassword(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Technician Login</DialogTitle>
+            <DialogDescription>
+              {authTech ? authTech.name : 'Manage technician portal login'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tech-auth-email">Login Email</Label>
+              <Input
+                id="tech-auth-email"
+                type="email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="techname@npa.com"
+              />
+              {authUserId ? (
+                <p className="text-xs text-slate-500">Auth user linked.</p>
+              ) : (
+                <p className="text-xs text-slate-500">No auth user linked yet (saving will create one).</p>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={saveAuthEmail} disabled={authSaving || !authTech}>
+                Save Email
+              </Button>
+              <Button variant="outline" onClick={resetAuthPassword} disabled={authSaving || !authTech || !authUserId}>
+                Reset Password
+              </Button>
+            </div>
+
+            {authPassword ? (
+              <div className="rounded-md border p-3 bg-slate-50">
+                <div className="text-xs text-slate-500">Generated password (copy now)</div>
+                <div className="mt-1 font-mono text-sm break-all">{authPassword}</div>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* QR Code Dialog */}
       <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
