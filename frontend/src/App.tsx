@@ -10,6 +10,7 @@ import { OrgPortal } from './components/OrgPortal';
 import { TechPortal } from './components/TechPortal';
 import { Toaster } from './components/ui/sonner';
 import { createClient } from './utils/supabase/client';
+import { backendUrl } from './utils/supabase/info';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -29,7 +30,7 @@ export default function App() {
     (async () => {
       try {
         setRoleLoading(true);
-        const res = await fetch('http://localhost:8000/make-server-60660975/me', {
+        const res = await fetch(`${backendUrl}/make-server-60660975/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();

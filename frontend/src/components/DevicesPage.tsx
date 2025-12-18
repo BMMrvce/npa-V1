@@ -10,7 +10,7 @@ import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
 import { Plus, QrCode, Edit, Archive, ArchiveRestore, ClipboardList, Printer } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId, publicAnonKey, backendUrl } from '../utils/supabase/info';
 import QRCode from 'qrcode';
 import { WaterDispenser } from './icons/WaterDispenser';
 
@@ -85,8 +85,8 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
   const fetchDevices = async () => {
     try {
       setLoading(true);
-      console.log('🟢 Fetching devices from:', `http://localhost:8000/make-server-60660975/devices`);
-      const response = await fetch(`http://localhost:8000/make-server-60660975/devices`, {
+      console.log('🟢 Fetching devices from:', `${backendUrl}/make-server-60660975/devices`);
+      const response = await fetch(`${backendUrl}/make-server-60660975/devices`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -111,9 +111,9 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
 
   const fetchOrganizations = async () => {
     try {
-      console.log('🟢 Fetching organizations from:', `http://localhost:8000/make-server-60660975/organizations`);
+      console.log('🟢 Fetching organizations from:', `${backendUrl}/make-server-60660975/organizations`);
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations`,
+        `${backendUrl}/make-server-60660975/organizations`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

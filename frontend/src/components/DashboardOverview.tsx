@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Building2, Wrench, ClipboardList, TrendingUp, Archive, PieChartIcon } from 'lucide-react';
-import { projectId } from '../utils/supabase/info';
+import { projectId, backendUrl } from '../utils/supabase/info';
 import { WaterDispenser } from './icons/WaterDispenser';
 
 interface DashboardOverviewProps {
@@ -340,19 +340,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
     try {
       // Fetch all data
       const [orgsRes, devicesRes, techsRes, maintRes, ticketsRes] = await Promise.all([
-        fetch(`http://localhost:8000/organizations`, {
+        fetch(`${backendUrl}/organizations`, {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
-        fetch(`http://localhost:8000/devices`, {
+        fetch(`${backendUrl}/devices`, {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
-        fetch(`http://localhost:8000/technicians`, {
+        fetch(`${backendUrl}/technicians`, {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
-        fetch(`http://localhost:8000/maintenance`, {
+        fetch(`${backendUrl}/maintenance`, {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
-        fetch(`http://localhost:8000/make-server-60660975/tickets`, {
+        fetch(`${backendUrl}/make-server-60660975/tickets`, {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
       ]);

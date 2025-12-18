@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { backendUrl } from '../utils/supabase/info';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Label } from './ui/label';
@@ -58,7 +59,7 @@ export const OrgTicketsPage: React.FC<OrgTicketsPageProps> = ({ token }) => {
   );
 
   const fetchTickets = async () => {
-    const res = await fetch('http://localhost:8000/make-server-60660975/org/tickets', {
+    const res = await fetch(`${backendUrl}/make-server-60660975/org/tickets`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
@@ -67,7 +68,7 @@ export const OrgTicketsPage: React.FC<OrgTicketsPageProps> = ({ token }) => {
   };
 
   const fetchDevices = async () => {
-    const res = await fetch('http://localhost:8000/make-server-60660975/org/devices', {
+    const res = await fetch(`${backendUrl}/make-server-60660975/org/devices`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
@@ -98,7 +99,7 @@ export const OrgTicketsPage: React.FC<OrgTicketsPageProps> = ({ token }) => {
     }
 
     try {
-      const res = await fetch('http://localhost:8000/make-server-60660975/org/tickets', {
+      const res = await fetch(`${backendUrl}/make-server-60660975/org/tickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

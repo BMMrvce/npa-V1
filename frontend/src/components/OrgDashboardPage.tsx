@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { toast } from 'sonner';
+import { backendUrl } from '../utils/supabase/info';
 
 interface OrgDashboardPageProps {
   token: string;
@@ -19,7 +20,7 @@ export const OrgDashboardPage: React.FC<OrgDashboardPageProps> = ({ token }) => 
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch('http://localhost:8000/make-server-60660975/org/dashboard', {
+        const res = await fetch(`${backendUrl}/make-server-60660975/org/dashboard`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();
