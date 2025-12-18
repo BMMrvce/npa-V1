@@ -139,7 +139,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
   const fetchTechnicians = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/technicians`,
+        `${backendUrl}/make-server-60660975/technicians`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -174,7 +174,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
 
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices`,
+        `${backendUrl}/make-server-60660975/devices`,
         {
           method: 'POST',
           headers: {
@@ -223,7 +223,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
 
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices/${editingDevice.id}`,
+        `${backendUrl}/make-server-60660975/devices/${editingDevice.id}`,
         {
           method: 'PUT',
           headers: {
@@ -256,7 +256,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
     try {
       const newArchivedStatus = !device.is_archived;
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices/${device.id}`,
+        `${backendUrl}/make-server-60660975/devices/${device.id}`,
         {
           method: 'PUT',
           headers: {
@@ -397,7 +397,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ token }) => {
     setHistoryDialogOpen(true);
     setHistoryLoading(true);
     try {
-      const resp = await fetch(`http://localhost:8000/make-server-60660975/maintenance/device/${device.id}` , {
+      const resp = await fetch(`${backendUrl}/make-server-60660975/maintenance/device/${device.id}` , {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

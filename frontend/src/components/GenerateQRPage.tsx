@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
 import { Button } from './ui/button';
+import { backendUrl } from '../utils/supabase/info';
 
 // Helper: normalize any image data URL into a square PNG data URL of `size` px.
 // This ensures every QR embedded in PDFs has identical pixel dimensions and margins.
@@ -77,7 +78,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
 
   const fetchOrganizations = async () => {
     try {
-      const res = await fetch('http://localhost:8000/organizations', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${backendUrl}/organizations`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setOrganizations(data.organizations || []);
     } catch (err) {
@@ -87,7 +88,7 @@ export const GenerateQRPage: React.FC<{ token: string }> = ({ token }) => {
 
   const fetchDevices = async () => {
     try {
-      const res = await fetch('http://localhost:8000/devices', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${backendUrl}/devices`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setDevices(data.devices || []);
     } catch (err) {

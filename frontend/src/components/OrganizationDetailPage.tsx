@@ -10,7 +10,7 @@ import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, QrCode, Edit, Archive, ArchiveRestore, Building2, Mail, Phone, FileText, ClipboardList, Printer } from 'lucide-react';
-import { projectId } from '../utils/supabase/info';
+import { projectId, backendUrl } from '../utils/supabase/info';
 import QRCode from 'qrcode';
 import { WaterDispenser } from './icons/WaterDispenser';
 
@@ -107,7 +107,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
   const fetchOrganization = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations`,
+        `${backendUrl}/make-server-60660975/organizations`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -130,7 +130,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
   const fetchDevices = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices`,
+        `${backendUrl}/make-server-60660975/devices`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -162,7 +162,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
   const fetchTechnicians = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/technicians`,
+        `${backendUrl}/make-server-60660975/technicians`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -183,7 +183,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
 
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices`,
+        `${backendUrl}/make-server-60660975/devices`,
         {
           method: 'POST',
           headers: {
@@ -229,7 +229,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
 
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices/${editingDevice.id}`,
+        `${backendUrl}/make-server-60660975/devices/${editingDevice.id}`,
         {
           method: 'PUT',
           headers: {
@@ -264,7 +264,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
   const handleArchiveToggle = async (device: Device) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/devices/${device.id}/archive`,
+        `${backendUrl}/make-server-60660975/devices/${device.id}/archive`,
         {
           method: 'PATCH',
           headers: {
@@ -340,7 +340,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
       };
 
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations/${organization.id}`,
+        `${backendUrl}/make-server-60660975/organizations/${organization.id}`,
         {
           method: 'PUT',
           headers: {
@@ -406,7 +406,7 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
     setHistoryDialogOpen(true);
     setHistoryLoading(true);
     try {
-      const resp = await fetch(`http://localhost:8000/make-server-60660975/maintenance/device/${device.id}`, {
+      const resp = await fetch(`${backendUrl}/make-server-60660975/maintenance/device/${device.id}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await resp.json();
