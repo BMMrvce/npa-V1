@@ -9,66 +9,39 @@
     "rewrites": [
       {
         "source": "/make-server-60660975/**",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/devices",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/devices/**",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/organizations",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/organizations/**",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/technicians",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/technicians/**",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/maintenance",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "/maintenance/**",
-        "run": {
-          "serviceId": "npa-backend",
-          "region": "asia-south1"
-        }
+        "destination": "/index.html"
       },
       {
         "source": "**",

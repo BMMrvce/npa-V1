@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "staging": "npav1-3868c",
+    "default": "npav1-3868c"
+  },
+  "targets": {},
+  "etags": {}
+}
