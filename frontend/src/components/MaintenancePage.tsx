@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
 import { Plus, ClipboardList, FileText, Calendar, Download, Redo, ChevronLeft, ChevronRight } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { backendUrl } from '../utils/supabase/info';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
