@@ -575,7 +575,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 type="email"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="npa001@npa.com"
+                placeholder="npa001@npa.com "
               />
               {authUserId ? (
                 <p className="text-xs text-slate-500">Auth user linked.</p>
