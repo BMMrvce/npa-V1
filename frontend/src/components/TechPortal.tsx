@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Button } from './ui/button';
-import { LogOut, LayoutDashboard, ClipboardList } from 'lucide-react';
+import { LogOut, LayoutDashboard, ClipboardList, Wrench } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { TechDashboardPage } from './TechDashboardPage';
 import { TechTicketsPage } from './TechTicketsPage';
+import { TechMaintenancePage } from './TechMaintenancePage';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -16,7 +17,7 @@ interface TechPortalProps {
   onLogout: () => void;
 }
 
-type TabType = 'dashboard' | 'tickets';
+type TabType = 'dashboard' | 'tickets' | 'maintenance';
 
 export const TechPortal: React.FC<TechPortalProps> = ({ token, user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -56,7 +57,8 @@ export const TechPortal: React.FC<TechPortalProps> = ({ token, user, onLogout })
 
   const tabs = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'tickets' as TabType, label: 'Assigned Tickets', icon: ClipboardList },
+    { id: 'maintenance' as TabType, label: 'Maintenance', icon: Wrench },
+    { id: 'tickets' as TabType, label: 'Tickets', icon: ClipboardList },
   ];
 
   return (
@@ -156,6 +158,7 @@ export const TechPortal: React.FC<TechPortalProps> = ({ token, user, onLogout })
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'dashboard' && <TechDashboardPage token={token} />}
+        {activeTab === 'maintenance' && <TechMaintenancePage token={token} />}
         {activeTab === 'tickets' && <TechTicketsPage token={token} />}
       </div>
     </div>

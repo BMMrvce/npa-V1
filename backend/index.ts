@@ -2091,6 +2091,78 @@ app.patch('/make-server-60660975/tech/tickets/:id/status', requireAuth, requireR
   }
 });
 
+// Organization: view maintenance records
+app.get('/make-server-60660975/org/maintenance', requireAuth, requireRole(['organization']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const organizationId = profile.organization_id;
+    if (!organizationId) return c.json({ error: 'Organization not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('maintenance')
+      .select(`
+        id,
+        device_id,
+        technician_id,
+        organization_id,
+        description,
+        status,
+        charges,
+        created_at,
+        updated_at
+      `)
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching org maintenance:', error);
+      return c.json({ error: 'Failed to fetch maintenance records' }, 500);
+    }
+
+    return c.json({ maintenance: data || [] });
+  } catch (e) {
+    console.log('Error fetching org maintenance:', e);
+    return c.json({ error: 'Failed to fetch maintenance records' }, 500);
+  }
+});
+
+// Technician: view all assigned maintenance records
+app.get('/make-server-60660975/tech/maintenance', requireAuth, requireRole(['technician']), async (c) => {
+  try {
+    const profile = (c as any).get('profile') as UserProfile;
+    const technicianId = profile.technician_id;
+    if (!technicianId) return c.json({ error: 'Technician not linked' }, 400);
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('maintenance')
+      .select(`
+        id,
+        device_id,
+        technician_id,
+        organization_id,
+        description,
+        status,
+        charges,
+        created_at,
+        updated_at
+      `)
+      .eq('technician_id', technicianId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching tech maintenance:', error);
+      return c.json({ error: 'Failed to fetch maintenance records' }, 500);
+    }
+
+    return c.json({ maintenance: data || [] });
+  } catch (e) {
+    console.log('Error fetching tech maintenance:', e);
+    return c.json({ error: 'Failed to fetch maintenance records' }, 500);
+  }
+});
+
 Deno.serve(app.fetch);
 
 
