@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from './ui/button';
-import { LogOut, LayoutDashboard, ClipboardList } from 'lucide-react';
+import { LogOut, LayoutDashboard, ClipboardList, Package, Wrench } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { OrgDashboardPage } from './OrgDashboardPage';
 import { OrgTicketsPage } from './OrgTicketsPage';
+import { OrgDevicesPage } from './OrgDevicesPage';
+import { OrgMaintenancePage } from './OrgMaintenancePage';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -16,7 +18,7 @@ interface OrgPortalProps {
   onLogout: () => void;
 }
 
-type TabType = 'dashboard' | 'tickets';
+type TabType = 'dashboard' | 'tickets' | 'devices' | 'maintenance';
 
 export const OrgPortal: React.FC<OrgPortalProps> = ({ token, user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -56,6 +58,8 @@ export const OrgPortal: React.FC<OrgPortalProps> = ({ token, user, onLogout }) =
 
   const tabs = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'devices' as TabType, label: 'My Devices', icon: Package },
+    { id: 'maintenance' as TabType, label: 'Maintenance', icon: Wrench },
     { id: 'tickets' as TabType, label: 'Tickets', icon: ClipboardList },
   ];
 
@@ -156,6 +160,8 @@ export const OrgPortal: React.FC<OrgPortalProps> = ({ token, user, onLogout }) =
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'dashboard' && <OrgDashboardPage token={token} />}
+        {activeTab === 'devices' && <OrgDevicesPage token={token} />}
+        {activeTab === 'maintenance' && <OrgMaintenancePage token={token} />}
         {activeTab === 'tickets' && <OrgTicketsPage token={token} />}
       </div>
     </div>
