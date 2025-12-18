@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
+import { backendUrl } from '../utils/supabase/info';
 
 interface TicketsPageProps {
   token: string;
@@ -54,7 +55,7 @@ export const TicketsPage: React.FC<TicketsPageProps> = ({ token }) => {
   );
 
   const fetchTickets = async () => {
-    const res = await fetch('http://localhost:8000/make-server-60660975/tickets', {
+    const res = await fetch(`${backendUrl}/make-server-60660975/tickets`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
@@ -63,7 +64,7 @@ export const TicketsPage: React.FC<TicketsPageProps> = ({ token }) => {
   };
 
   const fetchTechnicians = async () => {
-    const res = await fetch('http://localhost:8000/make-server-60660975/technicians', {
+    const res = await fetch(`${backendUrl}/make-server-60660975/technicians`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
@@ -93,7 +94,7 @@ export const TicketsPage: React.FC<TicketsPageProps> = ({ token }) => {
     }
 
     try {
-      const res = await fetch(`http://localhost:8000/make-server-60660975/tickets/${ticketId}/assign`, {
+      const res = await fetch(`${backendUrl}/make-server-60660975/tickets/${ticketId}/assign`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -118,7 +119,7 @@ export const TicketsPage: React.FC<TicketsPageProps> = ({ token }) => {
 
   const handleStatusChange = async (ticketId: string, status: TicketStatus) => {
     try {
-      const res = await fetch(`http://localhost:8000/make-server-60660975/tickets/${ticketId}/status`, {
+      const res = await fetch(`${backendUrl}/make-server-60660975/tickets/${ticketId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

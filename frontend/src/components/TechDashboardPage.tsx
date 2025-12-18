@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { toast } from 'sonner';
+import { backendUrl } from '../utils/supabase/info';
 
 interface TechDashboardPageProps {
   token: string;
@@ -18,7 +19,7 @@ export const TechDashboardPage: React.FC<TechDashboardPageProps> = ({ token }) =
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch('http://localhost:8000/make-server-60660975/tech/dashboard', {
+        const res = await fetch(`${backendUrl}/make-server-60660975/tech/dashboard`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();

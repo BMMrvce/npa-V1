@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
+import { backendUrl } from '../utils/supabase/info';
 
 interface TechTicketsPageProps {
   token: string;
@@ -42,7 +43,7 @@ export const TechTicketsPage: React.FC<TechTicketsPageProps> = ({ token }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchTickets = async () => {
-    const res = await fetch('http://localhost:8000/make-server-60660975/tech/tickets', {
+    const res = await fetch(`${backendUrl}/make-server-60660975/tech/tickets`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
@@ -66,7 +67,7 @@ export const TechTicketsPage: React.FC<TechTicketsPageProps> = ({ token }) => {
 
   const markDone = async (ticketId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/make-server-60660975/tech/tickets/${ticketId}/status`, {
+      const res = await fetch(`${backendUrl}/make-server-60660975/tech/tickets/${ticketId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
