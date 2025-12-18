@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { toast } from 'sonner';
 import { Plus, Wrench, Edit2, Archive, ArchiveRestore, QrCode, KeyRound } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { backendUrl } from '../utils/supabase/info';
 import { Badge } from './ui/badge';
 import QRCode from 'qrcode';
 
@@ -59,7 +59,7 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
   const fetchTechnicians = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/technicians`,
+        `${backendUrl}/make-server-60660975/technicians`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -100,8 +100,8 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
       };
 
       const url = editingTech
-        ? `http://localhost:8000/make-server-60660975/technicians/${editingTech.id}`
-        : `http://localhost:8000/make-server-60660975/technicians`;
+        ? `${backendUrl}/make-server-60660975/technicians/${editingTech.id}`
+        : `${backendUrl}/make-server-60660975/technicians`;
       
       const response = await fetch(url, {
         method: editingTech ? 'PUT' : 'POST',
@@ -154,7 +154,7 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
       setAuthDialogOpen(true);
 
       const res = await fetch(
-        `http://localhost:8000/make-server-60660975/technicians/${tech.id}/auth`,
+        `${backendUrl}/make-server-60660975/technicians/${tech.id}/auth`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
@@ -180,7 +180,7 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
     try {
       setAuthSaving(true);
       const res = await fetch(
-        `http://localhost:8000/make-server-60660975/technicians/${authTech.id}/auth`,
+        `${backendUrl}/make-server-60660975/technicians/${authTech.id}/auth`,
         {
           method: 'PUT',
           headers: {
@@ -211,7 +211,7 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
     try {
       setAuthSaving(true);
       const res = await fetch(
-        `http://localhost:8000/make-server-60660975/technicians/${authTech.id}/auth/reset-password`,
+        `${backendUrl}/make-server-60660975/technicians/${authTech.id}/auth/reset-password`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
@@ -251,7 +251,7 @@ export const TechniciansPage: React.FC<TechniciansPageProps> = ({ token }) => {
   const handleArchive = async (techId: string, currentArchived: boolean) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/technicians/${techId}/archive`,
+        `${backendUrl}/make-server-60660975/technicians/${techId}/archive`,
         {
           method: 'PATCH',
           headers: {

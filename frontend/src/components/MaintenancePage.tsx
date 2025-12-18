@@ -165,7 +165,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const fetchMaintenance = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/maintenance`,
+          `${backendUrl}/maintenance`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -193,7 +193,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const fetchDevices = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/devices`,
+          `${backendUrl}/devices`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -213,7 +213,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const fetchTechnicians = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/technicians`,
+          `${backendUrl}/technicians`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -231,7 +231,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   };  const fetchOrganizations = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/organizations`,
+          `${backendUrl}/organizations`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -299,7 +299,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         }
       }
       const response = await fetch(
-        `http://localhost:8000/maintenance`,
+          `${backendUrl}/maintenance`,
         {
           method: 'POST',
           headers: {
@@ -370,7 +370,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
         toast.warning(`Skipping devices with active maintenance: ${names}`);
       }
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/maintenance/bulk`,
+          `${backendUrl}/make-server-60660975/maintenance/bulk`,
         {
           method: 'POST',
           headers: {
@@ -425,7 +425,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
       return;
     }
     try {
-      let url = `http://localhost:8000/make-server-60660975/maintenance/organization/${selectedOrgId}`;
+      let url = `${backendUrl}/make-server-60660975/maintenance/organization/${selectedOrgId}`;
       if (reportStartDate || reportEndDate) {
         const params = [];
         if (reportStartDate) params.push(`start=${reportStartDate}`);
@@ -1091,7 +1091,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const handleStatusChange = async (recordId: string, newStatus: string) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/maintenance/${recordId}/status`,
+        `${backendUrl}/maintenance/${recordId}/status`,
         {
           method: 'PATCH',
           headers: {
@@ -1131,7 +1131,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
   const saveEditNotes = async (recordId: string) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/maintenance/${recordId}/notes`,
+        `${backendUrl}/maintenance/${recordId}/notes`,
         {
           method: 'PATCH',
           headers: {
@@ -1179,7 +1179,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ token }) => {
     }
 
     try {
-      const resp = await fetch(`http://localhost:8000/maintenance/${recordId}/charges`, {
+      const resp = await fetch(`${backendUrl}/maintenance/${recordId}/charges`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

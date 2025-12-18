@@ -9,7 +9,7 @@ import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
 import { Plus, Building2, Edit, Eye, Archive, ArchiveRestore, KeyRound } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { backendUrl } from '../utils/supabase/info';
 
 interface OrganizationsPageProps {
   token: string;
@@ -58,7 +58,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
   const fetchOrganizations = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations`,
+        `${backendUrl}/make-server-60660975/organizations`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -105,7 +105,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       };
       
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations`,
+        `${backendUrl}/make-server-60660975/organizations`,
         {
           method: 'POST',
           headers: {
@@ -158,7 +158,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       setAuthDialogOpen(true);
 
       const res = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations/${org.id}/auth`,
+        `${backendUrl}/make-server-60660975/organizations/${org.id}/auth`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
@@ -184,7 +184,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
     try {
       setAuthSaving(true);
       const res = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations/${authOrg.id}/auth`,
+        `${backendUrl}/make-server-60660975/organizations/${authOrg.id}/auth`,
         {
           method: 'PUT',
           headers: {
@@ -215,7 +215,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
     try {
       setAuthSaving(true);
       const res = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations/${authOrg.id}/auth/reset-password`,
+        `${backendUrl}/make-server-60660975/organizations/${authOrg.id}/auth/reset-password`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
@@ -255,7 +255,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       };
       
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations/${editingOrg.id}`,
+        `${backendUrl}/make-server-60660975/organizations/${editingOrg.id}`,
         {
           method: 'PUT',
           headers: {
@@ -287,7 +287,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
   const handleArchiveToggle = async (org: Organization) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/make-server-60660975/organizations/${org.id}/archive`,
+        `${backendUrl}/make-server-60660975/organizations/${org.id}/archive`,
         {
           method: 'PATCH',
           headers: {
