@@ -6,7 +6,7 @@ import { WaterDispenser } from './icons/WaterDispenser';
 
 interface DashboardOverviewProps {
   token: string;
-  onNavigate: (tab: 'overview' | 'organizations' | 'devices' | 'technicians' | 'maintenance') => void;
+  onNavigate: (tab: 'overview' | 'organizations' | 'devices' | 'technicians' | 'maintenance' | 'tickets') => void;
   user?: any;
 }
 
@@ -20,6 +20,7 @@ interface Stats {
   totalTechnicians: number;
   totalMaintenance: number;
   recentMaintenance: number;
+  activeTickets: number;
   // analytics
   maintenanceByDay: number[]; // last 30 days, oldest -> newest
   maintenanceByDayStatus: Record<string, number>[]; // per-day status breakdown
@@ -305,6 +306,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
     totalTechnicians: 0,
     totalMaintenance: 0,
     recentMaintenance: 0,
+    activeTickets: 0,
     maintenanceByDay: [],
     maintenanceByDayStatus: Array.from({ length: 30 }, () => ({})),
     deviceStatus: { active: 0, archived: 0 },
@@ -337,7 +339,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
   const fetchStats = async () => {
     try {
       // Fetch all data
-      const [orgsRes, devicesRes, techsRes, maintRes] = await Promise.all([
+      const [orgsRes, devicesRes, techsRes, maintRes, ticketsRes] = await Promise.all([
         fetch(`http://localhost:8000/organizations`, {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
@@ -350,19 +352,24 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
         fetch(`http://localhost:8000/maintenance`, {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
+        fetch(`http://localhost:8000/make-server-60660975/tickets`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
       ]);
 
-      const [orgsData, devicesData, techsData, maintData] = await Promise.all([
+      const [orgsData, devicesData, techsData, maintData, ticketsData] = await Promise.all([
         orgsRes.json(),
         devicesRes.json(),
         techsRes.json(),
         maintRes.json(),
+        ticketsRes.json(),
       ]);
 
       const organizations = orgsData.organizations || [];
       const devices = devicesData.devices || [];
       const technicians = techsData.technicians || [];
       const maintenance = maintData.maintenance || [];
+      const tickets = ticketsData.tickets || [];
 
       // Calculate stats
       const thirtyDaysAgo = new Date();
@@ -386,6 +393,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
 
       // recent maintenance count (last 30 days)
       const recentMaintenanceCount = maintenance.filter((m: any) => new Date(m.created_at) >= thirtyDaysAgo).length;
+
+      const activeTicketsCount = tickets.filter((t: any) => {
+        const s = String(t?.status || '').toLowerCase();
+        return s !== 'done';
+      }).length;
 
       // Build maintenanceByDay array (30 days: oldest -> newest)
       const maintenanceByDay: number[] = new Array(30).fill(0);
@@ -416,6 +428,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
         totalTechnicians: technicians.length,
         totalMaintenance: maintenance.length,
         recentMaintenance: recentMaintenanceCount,
+        activeTickets: activeTicketsCount,
         maintenanceByDay,
         maintenanceByDayStatus,
         deviceStatus: { active: activeDevicesCount, archived: archivedDevicesCount },
@@ -470,6 +483,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
       iconBg: 'bg-purple-600',
       navigateTo: 'maintenance' as const,
     },
+    {
+      title: 'Active Tickets',
+      value: stats.activeTickets,
+      subtitle: 'Open + In Progress',
+      icon: ClipboardList,
+      color: 'text-amber-600',
+      bgColor: 'bg-gradient-to-br from-amber-50 to-amber-100',
+      iconBg: 'bg-amber-600',
+      navigateTo: 'tickets' as const,
+    },
   ];
   if (loading) {
     return (
@@ -478,9 +501,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
           <h2 className="text-lg font-medium">Dashboard Overview</h2>
           <p className="text-gray-600">Loading statistics...</p>
         </div>
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="shadow-sm min-h-20 p-2">
+        <div className="grid gap-3 md:grid-cols-2 lg:flex lg:gap-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Card key={i} className="shadow-sm min-h-20 p-2 lg:flex-1">
               <CardHeader className="pb-1">
                 <div className="h-3 bg-gray-200 rounded animate-pulse w-24"></div>
               </CardHeader>
@@ -505,13 +528,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ token, onN
         <p className="mt-2 text-gray-600">Monitor your water dispenser management system</p>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:flex lg:gap-4">
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
             <Card 
               key={card.title} 
-              className={`overflow-hidden border-0 shadow-sm hover:shadow md:shadow-lg transition-all cursor-pointer ${card.bgColor} min-h-12 p-1`}
+              className={`overflow-hidden border-0 shadow-sm hover:shadow md:shadow-lg transition-all cursor-pointer ${card.bgColor} min-h-12 p-1 lg:flex-1`}
               onClick={() => onNavigate(card.navigateTo)}
             >
               <CardHeader className="pb-2">
