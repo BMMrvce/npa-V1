@@ -15,7 +15,8 @@ app.use('*', logger(console.log));
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: ["https://npav1-3868c.web.app", "https://npav1-3868c.firebaseapp.com", "http://localhost:5173"],
+    credentials: true,
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
