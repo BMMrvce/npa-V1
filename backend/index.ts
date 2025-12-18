@@ -11,18 +11,8 @@ const app = new Hono();
 // Enable logger
 app.use('*', logger(console.log));
 
-// Enable CORS for all routes and methods
-app.use(
-  "/*",
-  cors({
-    origin: ["https://npav1-3868c.web.app", "https://npav1-3868c.firebaseapp.com", "http://localhost:5173"],
-    credentials: true,
-    allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    exposeHeaders: ["Content-Length"],
-    maxAge: 600,
-  }),
-);
+// Enable CORS for all routes and methods - allow all origins for now
+app.use("/*", cors());
 
 // Initialize Supabase client for auth
 const getSupabaseAdmin = () => {
