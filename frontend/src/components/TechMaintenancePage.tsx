@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { toast } from 'sonner';
 import { Wrench, Search, Calendar, Building2 } from 'lucide-react';
 import { backendUrl } from '../utils/supabase/info';
@@ -45,6 +46,10 @@ export const TechMaintenancePage: React.FC<TechMaintenancePageProps> = ({ token 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
+  const [editingNotesText, setEditingNotesText] = useState('');
+  const [editingChargesId, setEditingChargesId] = useState<string | null>(null);
+  const [editingChargesValue, setEditingChargesValue] = useState('');
 
   useEffect(() => {
     fetchAll();
@@ -151,6 +156,138 @@ export const TechMaintenancePage: React.FC<TechMaintenancePageProps> = ({ token 
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
+  const handleStatusChange = async (recordId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`${backendUrl}/maintenance/${recordId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMsg = 'Failed to update status';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMsg = errorData.error || errorMsg;
+        } catch (e) {
+          console.error('Non-JSON error response:', errorText);
+        }
+        toast.error(errorMsg);
+        return;
+      }
+
+      toast.success('Status updated successfully');
+      fetchMaintenance();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error('Failed to update status');
+    }
+  };
+
+  const startEditNotes = (record: MaintenanceRecord) => {
+    setEditingNotesId(record.id);
+    setEditingNotesText(record.description || '');
+  };
+
+  const cancelEditNotes = () => {
+    setEditingNotesId(null);
+    setEditingNotesText('');
+  };
+
+  const saveEditNotes = async (recordId: string) => {
+    try {
+      const response = await fetch(`${backendUrl}/maintenance/${recordId}/notes`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ notes: editingNotesText }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMsg = 'Failed to update notes';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMsg = errorData.error || errorMsg;
+        } catch (e) {
+          console.error('Non-JSON error response:', errorText);
+        }
+        toast.error(errorMsg);
+        return;
+      }
+
+      toast.success('Notes updated successfully');
+      setEditingNotesId(null);
+      setEditingNotesText('');
+      fetchMaintenance();
+    } catch (error) {
+      console.error('Error updating notes:', error);
+      toast.error('Failed to update notes');
+    }
+  };
+
+  const startEditCharges = (record: MaintenanceRecord) => {
+    setEditingChargesId(record.id);
+    setEditingChargesValue(record.charges != null ? String(record.charges) : '');
+  };
+
+  const cancelEditCharges = () => {
+    setEditingChargesId(null);
+    setEditingChargesValue('');
+  };
+
+  const saveEditCharges = async (recordId: string) => {
+    const val = editingChargesValue;
+    const num = Number(val);
+    if (Number.isNaN(num) || num < 0) {
+      toast.error('Charges must be a non-negative number');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${backendUrl}/maintenance/${recordId}/charges`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ charges: num }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMsg = 'Failed to update charges';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMsg = errorData.error || errorMsg;
+        } catch (e) {
+          console.error('Non-JSON error response:', errorText);
+        }
+        toast.error(errorMsg);
+        return;
+      }
+
+      toast.success('Charges updated successfully');
+      setEditingChargesId(null);
+      setEditingChargesValue('');
+      fetchMaintenance();
+    } catch (error) {
+      console.error('Error updating charges:', error);
+      toast.error('Failed to update charges');
+    }
+  };
+
+  const getDeviceType = (deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    return (device as any)?.device_type || 'Comprehensive';
+  };
+
   const filteredMaintenance = maintenance.filter(record => {
     const deviceName = getDeviceName(record.device_id).toLowerCase();
     const orgName = getOrganizationName(record.organization_id).toLowerCase();
@@ -241,39 +378,119 @@ export const TechMaintenancePage: React.FC<TechMaintenancePageProps> = ({ token 
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredMaintenance.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell className="whitespace-nowrap">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-4 h-4 text-gray-400" />
-                          {new Date(record.created_at).toLocaleDateString()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{getOrganizationName(record.organization_id)}</span>
-                          <span className="text-xs text-gray-500">{getOrganizationCode(record.organization_id)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {getDeviceName(record.device_id)}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {getDeviceSerial(record.device_id)}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {record.description || '-'}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(record.status)}</TableCell>
-                      <TableCell>
-                        {record.charges != null ? (
-                          <span className="font-semibold">₹{record.charges.toFixed(2)}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredMaintenance.map((record) => {
+                    const isNotesEditing = editingNotesId === record.id;
+                    const isChargesEditing = editingChargesId === record.id;
+                    const deviceType = getDeviceType(record.device_id);
+                    const canEditCharges = deviceType.toLowerCase().trim() === 'non comprehensive';
+
+                    return (
+                      <TableRow key={record.id}>
+                        <TableCell className="whitespace-nowrap">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            {new Date(record.created_at).toLocaleDateString()}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{getOrganizationName(record.organization_id)}</span>
+                            <span className="text-xs text-gray-500">{getOrganizationCode(record.organization_id)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {getDeviceName(record.device_id)}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {getDeviceSerial(record.device_id)}
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          {isNotesEditing ? (
+                            <div className="flex gap-2 items-center">
+                              <Input
+                                value={editingNotesText}
+                                onChange={(e) => setEditingNotesText(e.target.value)}
+                                className="min-w-[200px]"
+                                placeholder="Enter description..."
+                              />
+                              <Button size="sm" onClick={() => saveEditNotes(record.id)} variant="default">
+                                Save
+                              </Button>
+                              <Button size="sm" onClick={cancelEditNotes} variant="outline">
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 group">
+                              <span className="truncate">{record.description || '-'}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => startEditNotes(record)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Select value={record.status} onValueChange={(val) => handleStatusChange(record.id, val)}>
+                            <SelectTrigger className="w-[150px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Yet to Start">Yet to Start</SelectItem>
+                              <SelectItem value="In Progress">In Progress</SelectItem>
+                              <SelectItem value="Completed">Completed</SelectItem>
+                              <SelectItem value="Cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          {canEditCharges ? (
+                            isChargesEditing ? (
+                              <div className="flex gap-2 items-center">
+                                <Input
+                                  type="number"
+                                  value={editingChargesValue}
+                                  onChange={(e) => setEditingChargesValue(e.target.value)}
+                                  className="w-24"
+                                  placeholder="0.00"
+                                  min="0"
+                                  step="0.01"
+                                />
+                                <Button size="sm" onClick={() => saveEditCharges(record.id)} variant="default">
+                                  Save
+                                </Button>
+                                <Button size="sm" onClick={cancelEditCharges} variant="outline">
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 group">
+                                {record.charges != null ? (
+                                  <span className="font-semibold">₹{record.charges.toFixed(2)}</span>
+                                ) : (
+                                  <span className="text-gray-400">Not set</span>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => startEditCharges(record)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  Edit
+                                </Button>
+                              </div>
+                            )
+                          ) : (
+                            <span className="text-gray-400">N/A (Comprehensive)</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
