@@ -2092,7 +2092,5 @@ app.patch('/make-server-60660975/tech/tickets/:id/status', requireAuth, requireR
 });
 
 Deno.serve(app.fetch);
-createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!)
 
 
