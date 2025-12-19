@@ -2219,7 +2219,7 @@ app.get('/make-server-60660975/tech/maintenance', requireAuth, requireRole(['tec
     if (!technicianId) return c.json({ error: 'Technician not linked' }, 400);
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data: maintenance, error } = await supabase
       .from('maintenance')
       .select(`
         id,
@@ -2240,7 +2240,55 @@ app.get('/make-server-60660975/tech/maintenance', requireAuth, requireRole(['tec
       return c.json({ error: 'Failed to fetch maintenance records' }, 500);
     }
 
-    return c.json({ maintenance: data || [] });
+    const records = maintenance || [];
+    const deviceIds = Array.from(new Set(records.map((r: any) => r.device_id).filter(Boolean)));
+    const orgIds = Array.from(new Set(records.map((r: any) => r.organization_id).filter(Boolean)));
+
+    // Fetch devices map
+    const devicesMap: Record<string, { name?: string; serial_number?: string; brand_serial_number?: string }> = {};
+    if (deviceIds.length > 0) {
+      const { data: devices, error: devErr } = await supabase
+        .from('devices')
+        .select('id, name, serial_number, brand_serial_number')
+        .in('id', deviceIds);
+      if (devErr) {
+        console.log('Warning: failed to fetch devices for tech maintenance:', devErr.message);
+      } else {
+        for (const d of devices || []) {
+          devicesMap[d.id as string] = { name: d.name, serial_number: d.serial_number, brand_serial_number: d.brand_serial_number };
+        }
+      }
+    }
+
+    // Fetch organizations map
+    const orgsMap: Record<string, { name?: string; organization_code?: string }> = {};
+    if (orgIds.length > 0) {
+      const { data: orgs, error: orgErr } = await supabase
+        .from('organizations')
+        .select('id, name, organization_code')
+        .in('id', orgIds);
+      if (orgErr) {
+        console.log('Warning: failed to fetch organizations for tech maintenance:', orgErr.message);
+      } else {
+        for (const o of orgs || []) {
+          orgsMap[o.id as string] = { name: o.name, organization_code: o.organization_code };
+        }
+      }
+    }
+
+    const enriched = records.map((r: any) => {
+      const dev = r.device_id ? devicesMap[r.device_id] : undefined;
+      const org = r.organization_id ? orgsMap[r.organization_id] : undefined;
+      return {
+        ...r,
+        device_name: dev?.name || null,
+        device_serial: dev?.serial_number || dev?.brand_serial_number || null,
+        organization_name: org?.name || null,
+        organization_code: org?.organization_code || null,
+      };
+    });
+
+    return c.json({ maintenance: enriched });
   } catch (e) {
     console.log('Error fetching tech maintenance:', e);
     return c.json({ error: 'Failed to fetch maintenance records' }, 500);
