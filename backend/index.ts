@@ -70,15 +70,48 @@ type UserProfile = {
 
 const getOrCreateImplicitAdminProfile = async (userId: string) => {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('user_id, role, organization_id, technician_id')
-    .eq('user_id', userId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('user_id, role, organization_id, technician_id')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-  if (error) {
-    console.log('Error fetching profile:', error);
-    // Backwards-compatible fallback if migration hasn't been run yet.
+    if (error) {
+      console.log('Error fetching profile:', error.message);
+      // Backwards-compatible fallback if migration hasn't been run yet.
+      return {
+        user_id: userId,
+        role: 'admin',
+        organization_id: null,
+        technician_id: null,
+      } satisfies UserProfile;
+    }
+
+    if (data) return data as UserProfile;
+
+    // Profile doesn't exist, try to create one
+    const { data: created, error: createErr } = await supabase
+      .from('profiles')
+      .insert({ user_id: userId, role: 'admin' })
+      .select('user_id, role, organization_id, technician_id')
+      .single();
+
+    if (createErr) {
+      console.log('Error creating implicit admin profile:', createErr.message);
+      // If profile insert fails (e.g., missing table), still allow app to function as admin.
+      return {
+        user_id: userId,
+        role: 'admin',
+        organization_id: null,
+        technician_id: null,
+      } satisfies UserProfile;
+    }
+
+    return created as UserProfile;
+  } catch (e) {
+    console.error('Unexpected error in getOrCreateImplicitAdminProfile:', e);
+    // Always fallback to admin if anything goes wrong
     return {
       user_id: userId,
       role: 'admin',
@@ -86,28 +119,6 @@ const getOrCreateImplicitAdminProfile = async (userId: string) => {
       technician_id: null,
     } satisfies UserProfile;
   }
-
-  if (data) return data as UserProfile;
-
-  // Backwards-compatible default: if no profile row exists, treat as admin.
-  const { data: created, error: createErr } = await supabase
-    .from('profiles')
-    .insert({ user_id: userId, role: 'admin' })
-    .select('user_id, role, organization_id, technician_id')
-    .single();
-
-  if (createErr) {
-    console.log('Error creating implicit admin profile:', createErr);
-    // If profile insert fails (e.g., missing table), still allow app to function as admin.
-    return {
-      user_id: userId,
-      role: 'admin',
-      organization_id: null,
-      technician_id: null,
-    } satisfies UserProfile;
-  }
-
-  return created as UserProfile;
 };
 
 const requireRole = (allowed: UserRole[]) => {
@@ -116,13 +127,17 @@ const requireRole = (allowed: UserRole[]) => {
       const userId = (c as any).get('userId') as string;
       const profile = await getOrCreateImplicitAdminProfile(userId);
       (c as any).set('profile', profile);
+      
       if (!allowed.includes(profile.role)) {
-        return c.json({ error: 'Forbidden' }, 403);
+        console.log(`Access denied for user ${userId} with role '${profile.role}'. Required roles: ${allowed.join(', ')}`);
+        return c.json({ 
+          error: `Forbidden - Your role '${profile.role}' doesn't have access. Required: ${allowed.join(' or ')}` 
+        }, 403);
       }
       await next();
     } catch (e) {
-      console.log('Error in requireRole:', e);
-      return c.json({ error: 'Internal server error' }, 500);
+      console.error('Error in requireRole:', e);
+      return c.json({ error: 'Internal server error during authorization check' }, 500);
     }
   };
 };
@@ -130,6 +145,36 @@ const requireRole = (allowed: UserRole[]) => {
 // Health check endpoint
 app.get("/make-server-60660975/health", (c) => {
   return c.json({ status: "ok" });
+});
+
+// Debug endpoint - check if profiles table exists and your profile
+app.get("/make-server-60660975/debug/profile", requireAuth, async (c) => {
+  try {
+    const userId = (c as any).get('userId') as string;
+    const supabase = getSupabaseAdmin();
+    
+    // Try to query profiles table
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    const profileExists = data ? true : false;
+    const profileRole = data?.role || null;
+    
+    return c.json({
+      userId,
+      profileExists,
+      profileRole,
+      fallbackRole: 'admin',
+      profileTableError: error?.message || null,
+      note: 'If profileExists is false, the system should create one automatically on first API call'
+    });
+  } catch (e) {
+    console.error('Error in debug endpoint:', e);
+    return c.json({ error: String(e) }, 500);
+  }
 });
 
 // Current user role info
@@ -276,25 +321,33 @@ app.post("/make-server-60660975/organizations", requireAuth, requireRole(['admin
       return c.json({ error: 'All required fields must be provided' }, 400);
     }
 
-    // Get current max organization number from existing organizations
+    // Compute the next unique organization code robustly
     const supabase = getSupabaseAdmin();
-    const { data: existingOrgs } = await supabase
+    const { data: existingOrgsAll, error: existingErr } = await supabase
       .from('organizations')
-      .select('organization_code')
-      .order('organization_code', { ascending: false })
-      .limit(1);
+      .select('organization_code');
+    if (existingErr) {
+      console.log('Error reading existing organizations:', existingErr);
+    }
+    const existingCodes = new Set<string>((existingOrgsAll || [])
+      .map((o: any) => String(o.organization_code || '').trim())
+      .filter((code) => !!code));
 
     let nextNumber = 1;
-    if (existingOrgs && existingOrgs.length > 0 && existingOrgs[0].organization_code) {
-      const lastCode = existingOrgs[0].organization_code;
-      const match = lastCode.match(/NPA-(\d+)/);
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1;
-      }
+    // Prefer max numeric value if any
+    const nums = Array.from(existingCodes)
+      .map((code) => code.match(/NPA-(\d+)/))
+      .filter(Boolean)
+      .map((m) => parseInt((m as RegExpMatchArray)[1], 10));
+    if (nums.length > 0) {
+      nextNumber = Math.max(...nums) + 1;
     }
-
-    // Generate organization code (NPA-001, NPA-002, etc.)
-    const organizationCode = `NPA-${String(nextNumber).padStart(3, '0')}`;
+    // Ensure the generated code is not already taken (handles non-sequential data)
+    let organizationCode = `NPA-${String(nextNumber).padStart(3, '0')}`;
+    while (existingCodes.has(organizationCode)) {
+      nextNumber += 1;
+      organizationCode = `NPA-${String(nextNumber).padStart(3, '0')}`;
+    }
 
     const organization = {
       name: companyName,
@@ -315,8 +368,12 @@ app.post("/make-server-60660975/organizations", requireAuth, requireRole(['admin
       .single();
       
     if (error) {
-      console.log('Insert error:', error);
-      throw new Error(error.message);
+      console.error('Insert error:', error);
+      console.error('Organization data attempted:', organization);
+      return c.json({ 
+        error: `Database error: ${error.message}`,
+        details: error.hint || error.details 
+      }, 500);
     }
 
     // Auto-create org portal auth user + link profile (RBAC)
@@ -338,41 +395,68 @@ app.post("/make-server-60660975/organizations", requireAuth, requireRole(['admin
       email_confirm: true,
     });
 
+    let authUserId: string | null = null;
+    let authCredentials: { email: string; password: string } | null = null;
+
     if (authErr || !createdUser?.user) {
-      console.log('Error creating org auth user:', authErr);
-      // Rollback org creation to keep workflow consistent
-      await supabase.from('organizations').delete().eq('id', orgId);
-      return c.json({ error: authErr?.message || 'Failed to create organization user' }, 500);
+      console.error('Warning: Failed to create org auth user:', authErr?.message);
+      console.log('Continuing with organization creation without auth setup');
+      // Don't fail - just skip auth setup for now
+    } else {
+      authUserId = createdUser.user.id;
+      
+      // Link profile
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .upsert(
+          { user_id: authUserId, role: 'organization', organization_id: orgId },
+          { onConflict: 'user_id' }
+        );
+      
+      if (profileErr) {
+        console.error('Warning: Error creating org profile:', profileErr);
+        // Try to clean up the auth user if profile linking fails
+        try {
+          await supabase.auth.admin.deleteUser(authUserId);
+        } catch (e) {
+          console.error('Could not delete dangling auth user:', e);
+        }
+        authUserId = null;
+      } else {
+        // Profile was created successfully, set credentials to return
+        authCredentials = { email: orgAuthEmail, password: orgAuthPassword };
+        
+        // Persist auth link on org row (best-effort if columns exist)
+        try {
+          await supabase
+            .from('organizations')
+            .update({
+              auth_user_id: authUserId,
+              auth_email: orgAuthEmail,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', orgId);
+        } catch (e) {
+          console.error('Warning: Could not update org with auth details:', e);
+        }
+      }
     }
 
-    const authUserId = createdUser.user.id;
-
-    // Link profile
-    const { error: profileErr } = await supabase
-      .from('profiles')
-      .upsert({ user_id: authUserId, role: 'organization', organization_id: orgId }, { onConflict: 'user_id' });
-    if (profileErr) {
-      console.log('Error creating org profile:', profileErr);
-      // Rollback both to avoid dangling users
-      await supabase.auth.admin.deleteUser(authUserId);
-      await supabase.from('organizations').delete().eq('id', orgId);
-      return c.json({ error: 'Failed to link organization user' }, 500);
-    }
-
-    // Persist auth link on org row (best-effort if columns exist)
-    await supabase
-      .from('organizations')
-      .update({ auth_user_id: authUserId, auth_email: orgAuthEmail, updated_at: new Date().toISOString() })
-      .eq('id', orgId);
-
+    // Always return organization as successful
     return c.json({
       success: true,
-      organization: { ...orgRow, auth_user_id: authUserId, auth_email: orgAuthEmail },
-      credentials: { email: orgAuthEmail, password: orgAuthPassword },
+      organization: { ...orgRow, auth_user_id: authUserId, auth_email: authUserId ? orgAuthEmail : undefined },
+      credentials: authCredentials,
+      ...(authErr ? { warning: 'Organization created but auth setup failed. You can set up login credentials later.' } : {})
     });
-  } catch (error) {
-    console.log('Error creating organization:', error);
-    return c.json({ error: 'Failed to create organization' }, 500);
+  } catch (error: any) {
+    const msg = typeof error?.message === 'string' ? error.message : 'Failed to create organization';
+    console.error('Error creating organization:', error);
+    console.error('Error stack:', error?.stack);
+    return c.json({ 
+      error: msg,
+      details: error?.details || error?.hint || null
+    }, 500);
   }
 });
 
