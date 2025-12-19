@@ -63,14 +63,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, variant = 
 
             if (!meRes.ok) {
               await supabase.auth.signOut();
-              toast.error(meJson?.error || 'Failed to verify account role');
+              const errorMsg = meJson?.error || 'Failed to verify account role';
+              console.error('Auth verification failed:', errorMsg);
+              toast.error(errorMsg);
               setLoading(false);
               return;
             }
 
             if (role !== expected) {
               await supabase.auth.signOut();
-              toast.error(`This account is not an ${expected.toUpperCase()} account. Please use the ${role.toUpperCase()} login.`);
+              const errorMsg = `This account is not an ${expected.toUpperCase()} account. Your role is: ${role.toUpperCase()}. Please use the ${role.toUpperCase()} login.`;
+              console.error('Role mismatch:', errorMsg);
+              toast.error(errorMsg);
               setLoading(false);
               return;
             }
