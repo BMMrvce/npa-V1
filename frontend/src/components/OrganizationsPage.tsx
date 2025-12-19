@@ -119,8 +119,15 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('Error creating organization:', data.error);
-        toast.error(data.error || 'Failed to create organization');
+        console.error('Error creating organization:', data);
+        const errorMsg = data.error || data.message || 'Failed to create organization';
+        
+        // Check if it's an authentication error
+        if (response.status === 401) {
+          toast.error('Session expired. Please logout and login again.');
+        } else {
+          toast.error(errorMsg);
+        }
         return;
       }
 
@@ -135,12 +142,15 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
         address: '',
       });
 
+      // Show auth dialog only if credentials were created
       if (data?.credentials?.email && data?.credentials?.password && data?.organization) {
         setAuthOrg(data.organization);
         setAuthEmail(data.credentials.email);
         setAuthUserId(data.organization.auth_user_id || null);
         setAuthPassword(data.credentials.password);
         setAuthDialogOpen(true);
+      } else if (data?.warning) {
+        toast.info(data.warning);
       }
       fetchOrganizations();
     } catch (error) {
