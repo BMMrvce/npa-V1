@@ -52,21 +52,15 @@ export const TechMaintenancePage: React.FC<TechMaintenancePageProps> = ({ token 
   const [editingChargesValue, setEditingChargesValue] = useState('');
 
   useEffect(() => {
-    fetchAll();
+    (async () => {
+      try {
+        setLoading(true);
+        await fetchMaintenance();
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [token]);
-
-  const fetchAll = async () => {
-    try {
-      setLoading(true);
-      await Promise.all([
-        fetchMaintenance(),
-        fetchDevices(),
-        fetchOrganizations(),
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchMaintenance = async () => {
     try {
@@ -95,54 +89,29 @@ export const TechMaintenancePage: React.FC<TechMaintenancePageProps> = ({ token 
     }
   };
 
-  const fetchDevices = async () => {
-    try {
-      const response = await fetch(`${backendUrl}/devices`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+  // Device/org data is now included from backend for tech maintenance
+  const fetchDevices = async () => {};
 
-      const data = await response.json();
-      if (response.ok) {
-        setDevices(data.devices || []);
-      }
-    } catch (error) {
-      console.error('Error fetching devices:', error);
-    }
-  };
-
-  const fetchOrganizations = async () => {
-    try {
-      const response = await fetch(`${backendUrl}/organizations`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        setOrganizations(data.organizations || []);
-      }
-    } catch (error) {
-      console.error('Error fetching organizations:', error);
-    }
-  };
+  const fetchOrganizations = async () => {};
 
   const getDeviceName = (deviceId: string) => {
-    const device = devices.find(d => d.id === deviceId);
-    return device?.name || 'Unknown Device';
+    const record = maintenance.find(m => m.device_id === deviceId) as any;
+    return record?.device_name || 'Unknown Device';
   };
 
   const getDeviceSerial = (deviceId: string) => {
-    const device = devices.find(d => d.id === deviceId);
-    return device?.serial_number || device?.brand_serial_number || 'N/A';
+    const record = maintenance.find(m => m.device_id === deviceId) as any;
+    return record?.device_serial || 'N/A';
   };
 
   const getOrganizationName = (orgId: string) => {
-    const org = organizations.find(o => o.id === orgId);
-    return org?.name || 'Unknown';
+    const record = maintenance.find(m => m.organization_id === orgId) as any;
+    return record?.organization_name || 'Unknown';
   };
 
   const getOrganizationCode = (orgId: string) => {
-    const org = organizations.find(o => o.id === orgId);
-    return org?.organization_code || 'N/A';
+    const record = maintenance.find(m => m.organization_id === orgId) as any;
+    return record?.organization_code || 'N/A';
   };
 
   const getStatusBadge = (status: string) => {
