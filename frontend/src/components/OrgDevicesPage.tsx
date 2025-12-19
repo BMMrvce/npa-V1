@@ -133,11 +133,20 @@ export const OrgDevicesPage: React.FC<OrgDevicesPageProps> = ({ token }) => {
                       <TableCell className="font-mono text-sm">
                         {device.brand_serial_number || '-'}
                       </TableCell>
-                      <TableCell>{device.model || '-'}</TableCell>
                       <TableCell>
-                        <Badge variant={device.device_type === 'Comprehensive' ? 'default' : 'secondary'}>
-                          {device.device_type || 'N/A'}
-                        </Badge>
+                        {device.model && String(device.model).trim() ? String(device.model).trim() : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const type = device.device_type && String(device.device_type).trim() 
+                            ? String(device.device_type).trim() 
+                            : 'Comprehensive';
+                          return (
+                            <Badge variant={type === 'Comprehensive' ? 'default' : 'secondary'}>
+                              {type}
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant={device.status === 'active' ? 'default' : 'secondary'}>
