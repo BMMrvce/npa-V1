@@ -1,15 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Badge } from './ui/badge';
-import { Switch } from './ui/switch';
-import { toast } from 'sonner';
-import { Plus, Building2, Edit, Eye, Archive, ArchiveRestore, KeyRound } from 'lucide-react';
-import { backendUrl } from '../utils/supabase/info';
+import React, { useState, useEffect } from "react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import { Badge } from "./ui/badge";
+import { Switch } from "./ui/switch";
+import { toast } from "sonner";
+import {
+  Plus,
+  Building2,
+  Edit,
+  Eye,
+  Archive,
+  ArchiveRestore,
+  KeyRound,
+} from "lucide-react";
+import { backendUrl } from "../utils/supabase/info";
 
 interface OrganizationsPageProps {
   token: string;
@@ -30,7 +52,10 @@ interface Organization {
   updated_at?: string;
 }
 
-export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onOrganizationClick }) => {
+export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({
+  token,
+  onOrganizationClick,
+}) => {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -38,21 +63,23 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authOrg, setAuthOrg] = useState<Organization | null>(null);
-  const [authEmail, setAuthEmail] = useState('');
+  const [authEmail, setAuthEmail] = useState("");
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authPassword, setAuthPassword] = useState<string | null>(null);
   const [authSaving, setAuthSaving] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [searchOrg, setSearchOrg] = useState('');
-  const [orgSortBy, setOrgSortBy] = useState<'name' | 'code' | 'created'>('name');
-  const [orgSortDir, setOrgSortDir] = useState<'asc' | 'desc'>('asc');
+  const [searchOrg, setSearchOrg] = useState("");
+  const [orgSortBy, setOrgSortBy] = useState<"name" | "code" | "created">(
+    "name",
+  );
+  const [orgSortDir, setOrgSortDir] = useState<"asc" | "desc">("asc");
   const [formData, setFormData] = useState({
-    companyName: '',
-    pan: '',
-    phoneNo: '',
-    email: '',
-    gstNo: '',
-    address: '',
+    companyName: "",
+    pan: "",
+    phoneNo: "",
+    email: "",
+    gstNo: "",
+    address: "",
   });
 
   const fetchOrganizations = async () => {
@@ -61,23 +88,23 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
         `${backendUrl}/make-server-60660975/organizations`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       const data = await response.json();
-      
+
       if (!response.ok) {
-        console.error('Error fetching organizations:', data.error);
-        toast.error(data.error || 'Failed to fetch organizations');
+        console.error("Error fetching organizations:", data.error);
+        toast.error(data.error || "Failed to fetch organizations");
         return;
       }
 
       setOrganizations(data.organizations || []);
     } catch (error) {
-      console.error('Error fetching organizations:', error);
-      toast.error('Failed to fetch organizations');
+      console.error("Error fetching organizations:", error);
+      toast.error("Failed to fetch organizations");
     } finally {
       setLoading(false);
     }
@@ -92,58 +119,68 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
 
     try {
       // Basic GST validation: 15 chars
-      const gst = (formData.gstNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const gst = (formData.gstNo || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       if (gst.length !== 15) {
-        toast.error('GST number must be exactly 15 characters');
+        toast.error("GST number must be exactly 15 characters");
         return;
       }
-      
+
       const sanitizedPayload = {
         ...formData,
-        pan: (formData.pan || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10),
+        pan: (formData.pan || "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 10),
         gstNo: gst,
       };
-      
+
       const response = await fetch(
         `${backendUrl}/make-server-60660975/organizations`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(sanitizedPayload),
-        }
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('Error creating organization:', data);
-        const errorMsg = data.error || data.message || 'Failed to create organization';
-        
+        console.error("Error creating organization:", data);
+        const errorMsg =
+          data.error || data.message || "Failed to create organization";
+
         // Check if it's an authentication error
         if (response.status === 401) {
-          toast.error('Session expired. Please logout and login again.');
+          toast.error("Session expired. Please logout and login again.");
         } else {
           toast.error(errorMsg);
         }
         return;
       }
 
-      toast.success('Organization created successfully!');
+      toast.success("Organization created successfully!");
       setDialogOpen(false);
       setFormData({
-        companyName: '',
-        pan: '',
-        phoneNo: '',
-        email: '',
-        gstNo: '',
-        address: '',
+        companyName: "",
+        pan: "",
+        phoneNo: "",
+        email: "",
+        gstNo: "",
+        address: "",
       });
 
       // Show auth dialog only if credentials were created
-      if (data?.credentials?.email && data?.credentials?.password && data?.organization) {
+      if (
+        data?.credentials?.email &&
+        data?.credentials?.password &&
+        data?.organization
+      ) {
         setAuthOrg(data.organization);
         setAuthEmail(data.credentials.email);
         setAuthUserId(data.organization.auth_user_id || null);
@@ -154,8 +191,8 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       }
       fetchOrganizations();
     } catch (error) {
-      console.error('Error creating organization:', error);
-      toast.error('Failed to create organization');
+      console.error("Error creating organization:", error);
+      toast.error("Failed to create organization");
     }
   };
 
@@ -164,30 +201,30 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       setAuthOrg(org);
       setAuthPassword(null);
       setAuthUserId(null);
-      setAuthEmail('');
+      setAuthEmail("");
       setAuthDialogOpen(true);
 
       const res = await fetch(
         `${backendUrl}/make-server-60660975/organizations/${org.id}/auth`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.error || 'Failed to load org login');
+        toast.error(data?.error || "Failed to load org login");
         return;
       }
       setAuthUserId(data.authUserId || null);
-      setAuthEmail(data.authEmail || '');
+      setAuthEmail(data.authEmail || "");
     } catch (e) {
       console.error(e);
-      toast.error('Failed to load org login');
+      toast.error("Failed to load org login");
     }
   };
 
   const saveAuthEmail = async () => {
     if (!authOrg) return;
-    if (!authEmail || !authEmail.includes('@')) {
-      toast.error('Enter a valid email');
+    if (!authEmail || !authEmail.includes("@")) {
+      toast.error("Enter a valid email");
       return;
     }
 
@@ -196,25 +233,25 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       const res = await fetch(
         `${backendUrl}/make-server-60660975/organizations/${authOrg.id}/auth`,
         {
-          method: 'PUT',
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ email: authEmail }),
-        }
+        },
       );
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.error || 'Failed to update email');
+        toast.error(data?.error || "Failed to update email");
         return;
       }
       setAuthUserId(data.authUserId || authUserId);
       setAuthPassword(data.password || null);
-      toast.success('Org login updated');
+      toast.success("Org login updated");
     } catch (e) {
       console.error(e);
-      toast.error('Failed to update email');
+      toast.error("Failed to update email");
     } finally {
       setAuthSaving(false);
     }
@@ -227,20 +264,20 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       const res = await fetch(
         `${backendUrl}/make-server-60660975/organizations/${authOrg.id}/auth/reset-password`,
         {
-          method: 'POST',
+          method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.error || 'Failed to reset password');
+        toast.error(data?.error || "Failed to reset password");
         return;
       }
       setAuthPassword(data.password);
-      toast.success('Password reset');
+      toast.success("Password reset");
     } catch (e) {
       console.error(e);
-      toast.error('Failed to reset password');
+      toast.error("Failed to reset password");
     } finally {
       setAuthSaving(false);
     }
@@ -252,45 +289,50 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
 
     try {
       // Basic GST validation
-      const gst = (formData.gstNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const gst = (formData.gstNo || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       if (gst.length !== 15) {
-        toast.error('GST number must be exactly 15 characters');
+        toast.error("GST number must be exactly 15 characters");
         return;
       }
-      
+
       const sanitizedPayload = {
         ...formData,
-        pan: (formData.pan || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10),
+        pan: (formData.pan || "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 10),
         gstNo: gst,
       };
-      
+
       const response = await fetch(
         `${backendUrl}/make-server-60660975/organizations/${editingOrg.id}`,
         {
-          method: 'PUT',
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(sanitizedPayload),
-        }
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('Error updating organization:', data.error);
-        toast.error(data.error || 'Failed to update organization');
+        console.error("Error updating organization:", data.error);
+        toast.error(data.error || "Failed to update organization");
         return;
       }
 
-      toast.success('Organization updated successfully!');
+      toast.success("Organization updated successfully!");
       setEditDialogOpen(false);
       setEditingOrg(null);
       fetchOrganizations();
     } catch (error) {
-      console.error('Error updating organization:', error);
-      toast.error('Failed to update organization');
+      console.error("Error updating organization:", error);
+      toast.error("Failed to update organization");
     }
   };
 
@@ -299,39 +341,47 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
       const response = await fetch(
         `${backendUrl}/make-server-60660975/organizations/${org.id}/archive`,
         {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ archived: !org.archived }),
-        }
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('Error archiving organization:', data.error);
-        toast.error(data.error || 'Failed to archive organization');
+        console.error("Error archiving organization:", data.error);
+        toast.error(data.error || "Failed to archive organization");
         return;
       }
 
-      toast.success(org.archived ? 'Organization unarchived!' : 'Organization archived!');
+      toast.success(
+        org.archived ? "Organization unarchived!" : "Organization archived!",
+      );
       fetchOrganizations();
     } catch (error) {
-      console.error('Error archiving organization:', error);
-      toast.error('Failed to archive organization');
+      console.error("Error archiving organization:", error);
+      toast.error("Failed to archive organization");
     }
   };
 
   const handleInputChange = (field: string, value: string) => {
-    if (field === 'pan') {
-      const next = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10);
+    if (field === "pan") {
+      const next = value
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toUpperCase()
+        .slice(0, 10);
       setFormData({ ...formData, pan: next });
       return;
     }
-    if (field === 'gstNo') {
-      const next = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15);
+    if (field === "gstNo") {
+      const next = value
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toUpperCase()
+        .slice(0, 15);
       setFormData({ ...formData, gstNo: next });
       return;
     }
@@ -342,48 +392,49 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
     setEditingOrg(org);
     setFormData({
       companyName: org.name,
-      pan: org.pan || '',
-      phoneNo: org.phone_no || '',
-      email: org.email || '',
-      gstNo: org.gst_no || '',
-      address: org.address || '',
+      pan: org.pan || "",
+      phoneNo: org.phone_no || "",
+      email: org.email || "",
+      gstNo: org.gst_no || "",
+      address: org.address || "",
     });
     setEditDialogOpen(true);
   };
 
-  let filteredOrganizations = organizations.filter(org =>
-    showArchived ? org.archived : !org.archived
+  let filteredOrganizations = organizations.filter((org) =>
+    showArchived ? org.archived : !org.archived,
   );
 
-  if (searchOrg && searchOrg.trim() !== '') {
+  if (searchOrg && searchOrg.trim() !== "") {
     const q = searchOrg.trim().toLowerCase();
-    filteredOrganizations = filteredOrganizations.filter(o => (
-      (o.name || '').toLowerCase().includes(q) ||
-      (o.organization_code || '').toLowerCase().includes(q) ||
-      (o.email || '').toLowerCase().includes(q)
-    ));
+    filteredOrganizations = filteredOrganizations.filter(
+      (o) =>
+        (o.name || "").toLowerCase().includes(q) ||
+        (o.organization_code || "").toLowerCase().includes(q) ||
+        (o.email || "").toLowerCase().includes(q),
+    );
   }
 
   filteredOrganizations = filteredOrganizations.sort((a, b) => {
-    let va: string | number = '';
-    let vb: string | number = '';
+    let va: string | number = "";
+    let vb: string | number = "";
     switch (orgSortBy) {
-      case 'code':
-        va = (a.organization_code || '').toLowerCase();
-        vb = (b.organization_code || '').toLowerCase();
+      case "code":
+        va = (a.organization_code || "").toLowerCase();
+        vb = (b.organization_code || "").toLowerCase();
         break;
-      case 'created':
+      case "created":
         va = new Date(a.created_at).getTime();
         vb = new Date(b.created_at).getTime();
         break;
-      case 'name':
+      case "name":
       default:
-        va = (a.name || '').toLowerCase();
-        vb = (b.name || '').toLowerCase();
+        va = (a.name || "").toLowerCase();
+        vb = (b.name || "").toLowerCase();
         break;
     }
-    if (va < vb) return orgSortDir === 'asc' ? -1 : 1;
-    if (va > vb) return orgSortDir === 'asc' ? 1 : -1;
+    if (va < vb) return orgSortDir === "asc" ? -1 : 1;
+    if (va > vb) return orgSortDir === "asc" ? 1 : -1;
     return 0;
   });
 
@@ -398,7 +449,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
     // Add 90 days
     const next = new Date(latest);
     next.setDate(next.getDate() + 90);
-    return next.toLocaleDateString('en-IN');
+    return next.toLocaleDateString("en-IN");
   }
 
   return (
@@ -418,7 +469,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Add New Organization</DialogTitle>
-              <DialogDescription>Create a new organization with company details</DialogDescription>
+              <DialogDescription>
+                Create a new organization with company details
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -426,7 +479,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 <Input
                   id="companyName"
                   value={formData.companyName}
-                  onChange={(e) => handleInputChange('companyName', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("companyName", e.target.value)
+                  }
                   required
                 />
               </div>
@@ -435,7 +490,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 <Input
                   id="pan"
                   value={formData.pan}
-                  onChange={(e) => handleInputChange('pan', e.target.value.toUpperCase())}
+                  onChange={(e) =>
+                    handleInputChange("pan", e.target.value.toUpperCase())
+                  }
                   maxLength={10}
                   placeholder="ABCDE1234F"
                   required
@@ -447,7 +504,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                   id="phoneNo"
                   type="tel"
                   value={formData.phoneNo}
-                  onChange={(e) => handleInputChange('phoneNo', e.target.value)}
+                  onChange={(e) => handleInputChange("phoneNo", e.target.value)}
                   required
                 />
               </div>
@@ -457,7 +514,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
                   required
                 />
               </div>
@@ -466,7 +523,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 <Input
                   id="gstNo"
                   value={formData.gstNo}
-                  onChange={(e) => handleInputChange('gstNo', e.target.value.toUpperCase())}
+                  onChange={(e) =>
+                    handleInputChange("gstNo", e.target.value.toUpperCase())
+                  }
                   maxLength={15}
                   placeholder="22ABCDE1234F1Z5"
                   required
@@ -477,10 +536,12 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 <Input
                   id="address"
                   value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
+                  onChange={(e) => handleInputChange("address", e.target.value)}
                 />
               </div>
-              <Button type="submit" className="w-full">Create Organization</Button>
+              <Button type="submit" className="w-full">
+                Create Organization
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -491,7 +552,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Organization</DialogTitle>
-            <DialogDescription>Update organization information</DialogDescription>
+            <DialogDescription>
+              Update organization information
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -499,7 +562,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
               <Input
                 id="edit-companyName"
                 value={formData.companyName}
-                onChange={(e) => handleInputChange('companyName', e.target.value)}
+                onChange={(e) =>
+                  handleInputChange("companyName", e.target.value)
+                }
                 required
               />
             </div>
@@ -508,7 +573,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
               <Input
                 id="edit-pan"
                 value={formData.pan}
-                onChange={(e) => handleInputChange('pan', e.target.value.toUpperCase())}
+                onChange={(e) =>
+                  handleInputChange("pan", e.target.value.toUpperCase())
+                }
                 maxLength={10}
                 required
               />
@@ -519,7 +586,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 id="edit-phoneNo"
                 type="tel"
                 value={formData.phoneNo}
-                onChange={(e) => handleInputChange('phoneNo', e.target.value)}
+                onChange={(e) => handleInputChange("phoneNo", e.target.value)}
                 required
               />
             </div>
@@ -529,7 +596,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 id="edit-email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
+                onChange={(e) => handleInputChange("email", e.target.value)}
                 required
               />
             </div>
@@ -538,7 +605,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
               <Input
                 id="edit-gstNo"
                 value={formData.gstNo}
-                onChange={(e) => handleInputChange('gstNo', e.target.value.toUpperCase())}
+                onChange={(e) =>
+                  handleInputChange("gstNo", e.target.value.toUpperCase())
+                }
                 maxLength={15}
                 required
               />
@@ -548,10 +617,12 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
               <Input
                 id="edit-address"
                 value={formData.address}
-                onChange={(e) => handleInputChange('address', e.target.value)}
+                onChange={(e) => handleInputChange("address", e.target.value)}
               />
             </div>
-            <Button type="submit" className="w-full">Update Organization</Button>
+            <Button type="submit" className="w-full">
+              Update Organization
+            </Button>
           </form>
         </DialogContent>
       </Dialog>
@@ -563,7 +634,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
           setAuthDialogOpen(open);
           if (!open) {
             setAuthOrg(null);
-            setAuthEmail('');
+            setAuthEmail("");
             setAuthUserId(null);
             setAuthPassword(null);
           }
@@ -573,7 +644,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
           <DialogHeader>
             <DialogTitle>Organization Login</DialogTitle>
             <DialogDescription>
-              {authOrg ? `${authOrg.name} (${authOrg.organization_code})` : 'Manage org portal login'}
+              {authOrg
+                ? `${authOrg.name} (${authOrg.organization_code})`
+                : "Manage org portal login"}
             </DialogDescription>
           </DialogHeader>
 
@@ -584,29 +657,37 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 id="org-auth-email"
                 type="email"
                 value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
+                readOnly
+                disabled
                 placeholder="npa001@npa.com "
               />
               {authUserId ? (
                 <p className="text-xs text-slate-500">Auth user linked.</p>
               ) : (
-                <p className="text-xs text-slate-500">No auth user linked yet (saving will create one).</p>
+                <p className="text-xs text-slate-500">
+                  No auth user linked yet.
+                </p>
               )}
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={saveAuthEmail} disabled={authSaving || !authOrg}>
-                Save Email
-              </Button>
-              <Button variant="outline" onClick={resetAuthPassword} disabled={authSaving || !authOrg || !authUserId}>
+              <Button
+                variant="outline"
+                onClick={resetAuthPassword}
+                disabled={authSaving || !authOrg || !authUserId}
+              >
                 Reset Password
               </Button>
             </div>
 
             {authPassword ? (
               <div className="rounded-md border p-3 bg-slate-50">
-                <div className="text-xs text-slate-500">Generated password (copy now)</div>
-                <div className="mt-1 font-mono text-sm break-all">{authPassword}</div>
+                <div className="text-xs text-slate-500">
+                  Generated password (copy now)
+                </div>
+                <div className="mt-1 font-mono text-sm break-all">
+                  {authPassword}
+                </div>
               </div>
             ) : null}
           </div>
@@ -620,7 +701,9 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
               <div className="p-2 rounded-md bg-slate-100 border border-slate-200">
                 <Building2 className="w-5 h-5 text-slate-700" />
               </div>
-              <span className="text-slate-900">Organizations ({filteredOrganizations.length})</span>
+              <span className="text-slate-900">
+                Organizations ({filteredOrganizations.length})
+              </span>
             </CardTitle>
             <div className="flex items-center gap-3">
               <Input
@@ -649,7 +732,10 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                 <option value="asc">Asc</option>
                 <option value="desc">Desc</option>
               </select>
-              <Label htmlFor="show-archived" className="text-sm text-slate-600 cursor-pointer select-none">
+              <Label
+                htmlFor="show-archived"
+                className="text-sm text-slate-600 cursor-pointer select-none"
+              >
                 Show Archived
               </Label>
               <Switch
@@ -670,16 +756,16 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
             <div className="text-center py-16">
               <Building2 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">
-                {showArchived 
-                  ? 'No archived organizations found.' 
-                  : 'No organizations found. Add your first organization!'}
+                {showArchived
+                  ? "No archived organizations found."
+                  : "No organizations found. Add your first organization!"}
               </p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
               {filteredOrganizations.map((org) => (
-                <div 
-                  key={org.id} 
+                <div
+                  key={org.id}
                   className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors group"
                 >
                   <div className="flex items-center gap-4 flex-1">
@@ -689,7 +775,8 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                     <div>
                       <h3 className="text-slate-900 font-bold">{org.name}</h3>
                       <p className="text-xs text-slate-500 font-bold mt-0.5">
-                        {org.organization_code || 'N/A'} • {org.archived ? 'Archived' : 'Active'}
+                        {org.organization_code || "N/A"} •{" "}
+                        {org.archived ? "Archived" : "Active"}
                       </p>
                       <p className="text-xs text-slate-600 mt-1">
                         {org.email} • {org.phone_no}
@@ -731,7 +818,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ token, onO
                       size="sm"
                       onClick={() => handleArchiveToggle(org)}
                       className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                      title={org.archived ? 'Unarchive' : 'Archive'}
+                      title={org.archived ? "Unarchive" : "Archive"}
                     >
                       {org.archived ? (
                         <ArchiveRestore className="w-4 h-4" />
