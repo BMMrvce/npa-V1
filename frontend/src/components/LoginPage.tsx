@@ -181,11 +181,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, variant = 
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-gray-700">Email Address</Label>
+              <Label htmlFor="email" className="text-gray-700">{variant === 'organization' ? 'Username' : 'Email Address'}</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder={variant === 'organization' ? 'Enter your email' : 'Enter your email'}
+                placeholder={variant === 'organization' ? 'Enter your username' : 'Enter your email'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

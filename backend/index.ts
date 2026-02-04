@@ -2531,7 +2531,7 @@ app.post(
 app.get(
   "/make-server-60660975/tech/dashboard",
   requireAuth,
-  requireRole(["technician"]),
+  requireRole(["technician", "admin"]),
   async (c) => {
     try {
       const profile = (c as any).get("profile") as UserProfile;
@@ -2568,7 +2568,7 @@ app.get(
 app.get(
   "/make-server-60660975/tech/tickets",
   requireAuth,
-  requireRole(["technician"]),
+  requireRole(["technician", "admin"]),
   async (c) => {
     try {
       const profile = (c as any).get("profile") as UserProfile;
@@ -2605,7 +2605,7 @@ app.get(
 app.patch(
   "/make-server-60660975/tech/tickets/:id/status",
   requireAuth,
-  requireRole(["technician"]),
+  requireRole(["technician", "admin"]),
   async (c) => {
     try {
       const profile = (c as any).get("profile") as UserProfile;
@@ -2711,7 +2711,7 @@ app.get(
 app.get(
   "/make-server-60660975/tech/maintenance",
   requireAuth,
-  requireRole(["technician"]),
+  requireRole(["technician", "admin"]),
   async (c) => {
     try {
       const profile = (c as any).get("profile") as UserProfile;
