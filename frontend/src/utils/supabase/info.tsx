@@ -3,7 +3,9 @@
 export const projectId = "dhsmxdfzmixqqoqlnfka";
 export const publicAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRoc214ZGZ6bWl4cXFvcWxuZmthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4ODgwNDksImV4cCI6MjA3NjQ2NDA0OX0.5KLHjnC1V_rJ60lMNleaVclB7kgagK_2NRgzw2c_s3w";
-export const backendUrl = "http://localhost:8000";
+
+// Backend URL: use env var if set (Vercel), fallback to localhost for development
+export const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
 // Helper function to get API endpoint
 export const getApiUrl = (path: string) => {
