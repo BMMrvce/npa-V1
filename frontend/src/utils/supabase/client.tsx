@@ -8,10 +8,20 @@ const supabaseUrl = envUrl || `https://${projectId}.supabase.co`;
 const anonKey = envAnonKey || publicAnonKey;
 
 let client: ReturnType<typeof createSupabaseClient> | null = null;
+let clientConfig: { supabaseUrl: string; anonKey: string } | null = null;
 
 export const createClient = () => {
-  if (!client) {
+  const nextConfig = { supabaseUrl, anonKey };
+
+  if (
+    !client ||
+    !clientConfig ||
+    clientConfig.supabaseUrl !== nextConfig.supabaseUrl ||
+    clientConfig.anonKey !== nextConfig.anonKey
+  ) {
     client = createSupabaseClient(supabaseUrl, anonKey);
+    clientConfig = nextConfig;
   }
+
   return client;
 };

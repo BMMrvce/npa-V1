@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Ensure Deno installed via official script is available in PATH
+export PATH="$HOME/.deno/bin:$PATH"
+
 # Clean up any existing processes on ports 8000 and 5173
 echo "🧹 Cleaning up existing processes..."
 lsof -ti:8000 | xargs kill -9 2>/dev/null || true
