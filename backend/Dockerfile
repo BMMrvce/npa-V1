@@ -9,10 +9,10 @@ COPY backend/ /app/
 RUN deno cache -A index.ts
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8000
 
 # Set environment variables
-ENV PORT=8080
+ENV PORT=8000
 
 # Run the server
-CMD ["run", "-A", "index.ts"]
+CMD ["run", "--allow-net", "--allow-env", "--allow-read", "index.ts"]
